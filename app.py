@@ -3,40 +3,49 @@ import streamlit.components.v1 as components
 from datetime import date, timedelta
 
 # 1. 화면 기본 설정
-st.set_page_config(page_title="기말고사 집중 스터디 플래너", layout="wide")
+st.set_page_config(page_title="프리미엄 스터디 플래너", layout="wide")
 
+# ✨ 디자인 끝판왕 CSS 적용 ✨
 st.markdown("""
     <style>
-    .main-title { font-size: 2.5rem; font-weight: 800; color: #1E3A8A; margin-bottom: 0px; }
-    .sub-title { font-size: 1.1rem; color: #6B7280; margin-bottom: 20px; }
-    .stTextArea textarea { font-size: 0.9rem; line-height: 1.4; }
-    .stButton button { font-size: 0.8rem; padding: 2px; }
+    /* 전체 배경을 은은한 파스텔 톤으로 */
+    .stApp { 
+        background: linear-gradient(135deg, #f8f9fa 0%, #e0eaf5 100%); 
+    }
+    /* 메인 타이틀: 홀로그램 그라데이션 텍스트 */
+    .main-title { 
+        font-size: 2.8rem; 
+        font-weight: 900; 
+        background: -webkit-linear-gradient(45deg, #6a11cb, #2575fc); 
+        -webkit-background-clip: text; 
+        -webkit-text-fill-color: transparent; 
+        text-align: center; 
+        margin-bottom: 5px; 
+    }
+    .sub-title { 
+        font-size: 1.1rem; 
+        color: #495057; 
+        font-weight: 600; 
+        text-align: center; 
+        margin-bottom: 30px; 
+    }
+    /* 달력 메모장(텍스트 입력창) 고급스럽게 다듬기 */
+    .stTextArea textarea { 
+        font-size: 0.95rem; 
+        line-height: 1.5;
+        border-radius: 12px; 
+        border: 1.5px solid #dee2e6; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.04); 
+        background-color: #ffffff;
+        transition: all 0.2s ease; 
+    }
+    /* 메모장 클릭(집중)했을 때 파란색 테두리와 네온 그림자 효과 */
+    .stTextArea textarea:focus { 
+        border-color: #2575fc; 
+        box-shadow: 0 0 8px rgba(37, 117, 252, 0.3); 
+    }
     </style>
 """, unsafe_allow_html=True)
-
-# ---------------------------------------------------------
-# 세션 상태(임시 저장소) 초기화 및 이월하기 함수 설정
-# ---------------------------------------------------------
-start_date = date(2026, 11, 23)
-end_date = date(2026, 12, 23)
-total_days = (end_date - start_date).days + 1
-valid_dates = [start_date + timedelta(days=i) for i in range(total_days)]
-
-for d in valid_dates:
-    key = f"memo_{d.strftime('%Y_%m_%d')}"
-    if key not in st.session_state:
-        st.session_state[key] = ""
-
-def rollover_task(curr_d, next_d):
-    curr_key = f"memo_{curr_d.strftime('%Y_%m_%d')}"
-    next_key = f"memo_{next_d.strftime('%Y_%m_%d')}"
-    
-    if next_key in st.session_state:
-        curr_text = st.session_state[curr_key].strip()
-        if curr_text: 
-            existing_next = st.session_state[next_key]
-            st.session_state[next_key] = existing_next + ("\n" if existing_next else "") + "➡️ [이월됨] " + curr_text
-            st.session_state[curr_key] = ""
 
 # ---------------------------------------------------------
 # 2. 왼쪽 사이드바: 목표, 트래커, 타이머
@@ -44,7 +53,6 @@ def rollover_task(curr_d, next_d):
 with st.sidebar:
     st.header("🎯 나의 다짐")
     goal = st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과")
-    
     target_grade = st.selectbox(
         "목표 등급", 
         ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"]
@@ -54,7 +62,6 @@ with st.sidebar:
     
     st.header("⚾ 오늘의 수학 타석")
     st.caption("매일 30문제 타격 목표! 꾸준함이 생명이다.")
-    
     math_count = st.number_input(
         "오늘 푼 수학 문제 수", 
         min_value=0, 
@@ -64,7 +71,6 @@ with st.sidebar:
     )
     
     st.progress(min(math_count / 30.0, 1.0))
-    
     if math_count >= 30:
         st.success("장외 홈런! ⚾ 오늘 수학 감각 완벽해!")
     elif math_count > 0:
@@ -76,10 +82,10 @@ with st.sidebar:
     st.caption("50분 전력 질주 후 10분 휴식 (작전 타임)")
     
     timer_html = """
-    <div style="text-align:center; padding:10px; border-radius:10px; background:#f3f4f6; border: 2px solid #e5e7eb;">
+    <div style="text-align:center; padding:10px; border-radius:12px; background:#ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
         <h1 id="time" style="color:#d97706; font-size: 2.5rem; margin: 10px 0;">50:00</h1>
-        <button onclick="startTimer(50)" style="padding:8px 12px; margin:2px; cursor:pointer; background:#2563eb; color:white; border:none; border-radius:5px; font-weight:bold;">🔥 50분 집중</button>
-        <button onclick="startTimer(10)" style="padding:8px 12px; margin:2px; cursor:pointer; background:#10b981; color:white; border:none; border-radius:5px; font-weight:bold;">💧 10분 휴식</button>
+        <button onclick="startTimer(50)" style="padding:8px 12px; margin:2px; cursor:pointer; background:linear-gradient(45deg, #2563eb, #3b82f6); color:white; border:none; border-radius:8px; font-weight:bold;">🔥 50분 집중</button>
+        <button onclick="startTimer(10)" style="padding:8px 12px; margin:2px; cursor:pointer; background:linear-gradient(45deg, #10b981, #34d399); color:white; border:none; border-radius:8px; font-weight:bold;">💧 10분 휴식</button>
         <script>
             let timer;
             function startTimer(minutes) {
@@ -106,8 +112,14 @@ with st.sidebar:
 # ---------------------------------------------------------
 # 3. 메인 화면: 맞춤형 기간 달력 (11.23 ~ 12.23)
 # ---------------------------------------------------------
-st.markdown('<p class="main-title">📅 기말고사 집중 달력 (11/23 ~ 12/23)</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">계획을 못 지켰다면 자책하지 말고 [내일로 이월] 버튼을 눌러 털어버리세요.</p>', unsafe_allow_html=True)
+st.markdown('<p class="main-title">📅 기말고사 집중 달력</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 대비 시간표</p>', unsafe_allow_html=True)
+
+# 날짜 계산 (11월 23일 ~ 12월 23일)
+start_date = date(2026, 11, 23)
+end_date = date(2026, 12, 23)
+total_days = (end_date - start_date).days + 1
+valid_dates = [start_date + timedelta(days=i) for i in range(total_days)]
 
 all_dates = list(valid_dates)
 while len(all_dates) % 7 != 0:
@@ -116,25 +128,27 @@ while len(all_dates) % 7 != 0:
 weeks = [all_dates[i:i+7] for i in range(0, len(all_dates), 7)]
 weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
 
+# 요일 헤더
 header_cols = st.columns(7)
 for i, day_name in enumerate(weekdays):
-    color = "red" if i == 6 else "#2563EB" if i == 5 else "#374151"
+    color = "red" if i == 6 else "#2575fc" if i == 5 else "#495057"
     header_cols[i].markdown(
-        f"<div style='text-align: center; font-weight: bold; color: {color}; padding-bottom: 10px;'>{day_name}</div>", 
+        f"<div style='text-align: center; font-weight: 800; color: {color}; padding-bottom: 10px;'>{day_name}</div>", 
         unsafe_allow_html=True
     )
 
 st.write("---")
 
+# 달력 칸 생성
 for week in weeks:
     cols = st.columns(7)
     for i, day in enumerate(week):
         with cols[i]:
             if day is not None:
-                day_color = "red" if i == 6 else "#2563EB" if i == 5 else "black"
+                day_color = "red" if i == 6 else "#2575fc" if i == 5 else "#343a40"
                 
                 st.markdown(
-                    f"<div style='color: {day_color}; font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;'>{day.month}/{day.day}</div>", 
+                    f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", 
                     unsafe_allow_html=True
                 )
                 
@@ -144,19 +158,9 @@ for week in weeks:
                     label=f"{day.month}월 {day.day}일 시간표", 
                     label_visibility="collapsed", 
                     key=key, 
-                    height=140, 
+                    height=150, 
                     placeholder="국어 1강\n수학 15p"
                 )
-                
-                if day < end_date:
-                    next_day = day + timedelta(days=1)
-                    st.button(
-                        "➡️ 쿨하게 이월", 
-                        key=f"btn_{key}", 
-                        on_click=rollover_task, 
-                        args=(day, next_day), 
-                        use_container_width=True
-                    )
             else:
                 st.write("")
     st.write("")

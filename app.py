@@ -38,7 +38,6 @@ with st.sidebar:
     
     st.divider()
     
-    # [수정됨] 세련된 이름과 전문적인 메시지로 변경
     st.header("📐 일일 수학 달성도")
     st.caption("매일 30문제 이상 꾸준히 푸는 것이 최상위권의 핵심입니다.")
     math_count = st.number_input("오늘 푼 수학 문제 수 (목표: 30)", min_value=0, max_value=200, value=0, step=1)
@@ -90,13 +89,23 @@ with st.sidebar:
 
     st.divider()
 
+    # 📸 실시간 카메라 촬영 및 갤러리 업로드 탭 추가
     st.header("📸 오늘 공부 인증")
-    st.caption("스터디 플래너나 다 푼 문제집을 찍어 올려주세요.")
-    uploaded_file = st.file_uploader("인증 사진 업로드", type=["jpg", "jpeg", "png"])
+    st.caption("지금 바로 카메라로 찍거나 갤러리에서 올려주세요.")
     
-    if uploaded_file is not None:
-        st.image(uploaded_file, caption="오늘도 해냈습니다! 고생 많으셨습니다 🔥", use_container_width=True)
-        st.balloons()
+    tab1, tab2 = st.tabs(["📷 바로 찍기", "📂 갤러리에서 올리기"])
+    
+    with tab1:
+        camera_photo = st.camera_input("실시간 인증 사진 찍기", label_visibility="collapsed")
+        if camera_photo is not None:
+            st.image(camera_photo, caption="오늘도 해냈습니다! 고생 많으셨습니다 🔥", use_container_width=True)
+            st.balloons()
+            
+    with tab2:
+        uploaded_file = st.file_uploader("인증 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+        if uploaded_file is not None:
+            st.image(uploaded_file, caption="오늘도 해냈습니다! 고생 많으셨습니다 🔥", use_container_width=True)
+            st.balloons()
 
 # ---------------------------------------------------------
 # 3. 메인 화면: 맞춤형 기간 달력 (11.23 ~ 12.23)
@@ -134,19 +143,4 @@ for week in weeks:
                 day_color = "red" if i == 6 else "#2575fc" if i == 5 else "#343a40"
                 
                 st.markdown(
-                    f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", 
-                    unsafe_allow_html=True
-                )
-                
-                key = f"memo_{day.strftime('%Y_%m_%d')}"
-                
-                st.text_area(
-                    label=f"{day.month}월 {day.day}일 시간표", 
-                    label_visibility="collapsed", 
-                    key=key, 
-                    height=150, 
-                    placeholder="국어 1강\n수학 15p"
-                )
-            else:
-                st.write("")
-    st.write("")
+                    f"<div style='color: {day

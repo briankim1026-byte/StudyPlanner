@@ -129,3 +129,34 @@ st.write("---")
 for week in weeks:
     cols = st.columns(7)
     for i, day in enumerate(week):
+        with cols[i]:
+            if day is not None:
+                day_color = "red" if i == 6 else "#2563EB" if i == 5 else "black"
+                
+                st.markdown(
+                    f"<div style='color: {day_color}; font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;'>{day.month}/{day.day}</div>", 
+                    unsafe_allow_html=True
+                )
+                
+                key = f"memo_{day.strftime('%Y_%m_%d')}"
+                
+                st.text_area(
+                    label=f"{day.month}월 {day.day}일 시간표", 
+                    label_visibility="collapsed", 
+                    key=key, 
+                    height=140, 
+                    placeholder="국어 1강\n수학 15p"
+                )
+                
+                if day < end_date:
+                    next_day = day + timedelta(days=1)
+                    st.button(
+                        "➡️ 쿨하게 이월", 
+                        key=f"btn_{key}", 
+                        on_click=rollover_task, 
+                        args=(day, next_day), 
+                        use_container_width=True
+                    )
+            else:
+                st.write("")
+    st.write("")

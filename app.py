@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from datetime import date, timedelta
 
 # 1. 화면 기본 설정
@@ -9,84 +10,68 @@ st.markdown("""
     .main-title { font-size: 2.5rem; font-weight: 800; color: #1E3A8A; margin-bottom: 0px; }
     .sub-title { font-size: 1.1rem; color: #6B7280; margin-bottom: 20px; }
     .stTextArea textarea { font-size: 0.9rem; line-height: 1.4; }
+    /* 이월 버튼 스타일 살짝 다듬기 */
+    .stButton button { font-size: 0.8rem; padding: 2px; }
     </style>
 """, unsafe_allow_html=True)
 
-# 2. 왼쪽 사이드바: 나의 다짐 & D-Day
-with st.sidebar:
-    st.header("🎯 나의 다짐 & 목표")
-    goal = st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과")
-    target_grade = st.selectbox("목표 등급", ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"])
-    
-    if goal:
-        st.success(f"🔥 목표: {goal}")
-    if target_grade != "선택하세요":
-        st.info(f"📈 다짐: 반드시 {target_grade} 달성!")
-    
-    st.divider()
-    
-    st.header("⏳ 기말고사 D-Day")
-    exam_name = st.text_input("시험 이름", value="2학기 기말고사")
-    exam_date = st.date_input("기말고사 날짜를 선택하세요", value=date(2026, 12, 23))
-    
-    if exam_name:
-        today = date.today()
-        delta = exam_date - today
-        if delta.days > 0:
-            st.error(f"🚨 **{exam_name}**까지 **D-{delta.days}** 남았습니다!")
-            st.progress(max(0, min(100, 100 - (delta.days * 2)))) 
-        elif delta.days == 0:
-            st.success(f"🎉 오늘은 **{exam_name}** 당일! 파이팅!")
-        else:
-            st.write(f"**{exam_name}**이 끝났습니다. 수고 많았어요!")
-
-# 3. 메인 화면: 맞춤형 기간 달력 (11.23 ~ 12.23)
-st.markdown('<p class="main-title">📅 기말고사 집중 달력 (11/23 ~ 12/23)</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">다음 주 월요일부터 12월 23일까지의 실전 계획을 세워보세요.</p>', unsafe_allow_html=True)
-
-# 날짜 계산 로직 (2026년 11월 23일 ~ 2026년 12월 23일)
+# ---------------------------------------------------------
+# 세션 상태(임시 저장소) 초기화 및 이월하기 함수 설정
+# ---------------------------------------------------------
 start_date = date(2026, 11, 23)
 end_date = date(2026, 12, 23)
 total_days = (end_date - start_date).days + 1
+valid_dates = [start_date + timedelta(days=i) for i in range(total_days)]
 
-# 시작일부터 종료일까지의 모든 날짜 리스트 만들기
-all_dates = [start_date + timedelta(days=i) for i in range(total_days)]
+# 각 날짜별 메모장을 세션에 미리 만들어두기
+for d in valid_dates:
+    key = f"memo_{d.strftime('%Y_%m_%d')}"
+    if key not in st.session_state:
+        st.session_state[key] = ""
 
-# 마지막 주 빈칸 채우기 (7칸을 맞추기 위해)
-while len(all_dates) % 7 != 0:
-    all_dates.append(None)
+# ➡️ [기능 3] 내일로 쿨하게 이월하기 로직
+def rollover_task(curr_d, next_d):
+    curr_key = f"memo_{curr_d.strftime('%Y_%m_%d')}"
+    next_key = f"memo_{next_d.strftime('%Y_%m_%d')}"
+    
+    if next_key in st.session_state:
+        curr_text = st.session_state[curr_key].strip()
+        if curr_text: # 적힌 내용이 있을 때만 이월
+            existing_next = st.session_state[next_key]
+            # 다음날 메모장 밑에 이월된 내용 추가
+            st.session_state[next_key] = existing_next + ("\n" if existing_next else "") + "➡️ [이월됨] " + curr_text
+            # 오늘 메모장은 비우기
+            st.session_state[curr_key] = ""
 
-# 7일씩 묶어서 주(Week) 단위 리스트로 만들기
-weeks = [all_dates[i:i+7] for i in range(0, len(all_dates), 7)]
+# ---------------------------------------------------------
+# 2. 왼쪽 사이드바: 목표, 트래커, 타이머
+# ---------------------------------------------------------
+with st.sidebar:
+    st.header("🎯 나의 다짐")
+    goal = st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과")
+    target_grade = st.selectbox("목표 등급", ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"])
+    
+    st.divider()
+    
+    # ⚾ [기능 1] 수학 전용 타격 트래커
+    st.header("⚾ 오늘의 수학 타석")
+    st.caption("매일 30문제 타격 목표! 꾸준함이 생명이다.")
+    math_count = st.number_input("오늘 푼 수학 문제 수", min_value=0, max_value=200, value=0, step=1)
+    
+    # 프로그레스 바 (30문제 기준 100%)
+    st.progress(min(math_count / 30.0, 1.0))
+    if math_count >= 30:
+        st.success("장외 홈런! ⚾ 오늘 수학 감각 완벽해!")
+    elif math_count > 0:
+        st.info("안타! 계속 배트를 휘둘러보자.")
+        
+    st.divider()
 
-# 요일 헤더 출력 (월~일 7칸)
-weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
-header_cols = st.columns(7)
-for i, day_name in enumerate(weekdays):
-    color = "red" if i == 6 else "#2563EB" if i == 5 else "#374151"
-    header_cols[i].markdown(f"<div style='text-align: center; font-weight: bold; color: {color}; padding-bottom: 10px;'>{day_name}</div>", unsafe_allow_html=True)
-
-st.write("---")
-
-# 달력 네모 칸 만들기
-for week in weeks:
-    cols = st.columns(7)
-    for i, day in enumerate(week):
-        with cols[i]:
-            if day is not None: # 진짜 날짜가 있는 칸
-                day_color = "red" if i == 6 else "#2563EB" if i == 5 else "black"
-                
-                # '11/23' 형식으로 날짜 표시
-                st.markdown(f"<div style='color: {day_color}; font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
-                
-                # 메모장 생성
-                st.text_area(
-                    label=f"{day.month}월 {day.day}일 시간표", 
-                    label_visibility="collapsed",
-                    key=f"memo_{day.year}_{day.month}_{day.day}", 
-                    height=180, 
-                    placeholder="계획 입력..."
-                )
-            else: # 날짜가 없는 빈칸 (12월 24일 이후 칸들)
-                st.write("")
-    st.write("") # 한 주가 끝날 때마다 간격 띄우기
+    # 🏀 [기능 2] 농구 하프타임 타이머
+    st.header("🏀 하프타임 타이머")
+    st.caption("50분 전력 질주 후 10분 휴식 (작전 타임)")
+    
+    # 타이머용 HTML/JS 코드 (화면 멈춤 방지)
+    timer_html = """
+    <div style="text-align:center; padding:10px; border-radius:10px; background:#f3f4f6; border: 2px solid #e5e7eb;">
+        <h1 id="time" style="

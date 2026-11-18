@@ -1,111 +1,103 @@
 import streamlit as st
+import pandas as pd
 from datetime import date
-import time
 
-# 1. 화면 기본 설정
-st.set_page_config(page_title="나만의 스터디 플래너", layout="wide")
+# 1. 화면 기본 설정 (넓게 쓰기)
+st.set_page_config(page_title="프리미엄 스터디 플래너", layout="wide")
 
-# 세션 상태(데이터 저장) 초기화
-if 'todos' not in st.session_state:
-    st.session_state.todos = []
-if 'is_running' not in st.session_state:
-    st.session_state.is_running = False
-if 'start_time' not in st.session_state:
-    st.session_state.start_time = None
-if 'elapsed_time' not in st.session_state:
-    st.session_state.elapsed_time = 0
+# 세련된 디자인을 위한 커스텀 CSS (배경색, 둥근 모서리 등)
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 2.5rem;
+        font-weight: 800;
+        color: #1E3A8A;
+        margin-bottom: 0px;
+    }
+    .sub-title {
+        font-size: 1.2rem;
+        color: #6B7280;
+        margin-bottom: 30px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
-# 2. 사이드바 (목표 및 디데이)
+# 데이터를 컴퓨터(세션)에 임시 저장하기 위한 설정
+if 'schedules' not in st.session_state:
+    st.session_state.schedules = {}
+
+# 2. 왼쪽 사이드바: 나의 목표 & D-Day
 with st.sidebar:
-    st.header("🎯 나의 목표")
-    goal = st.text_input("목표 대학이나 다짐을 적어보세요", placeholder="예: 연세대학교")
+    st.header("🎯 나의 다짐 & 목표")
+    goal = st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과")
+    
+    # 목표 등급 선택 칸 (드롭다운)
+    target_grade = st.selectbox("목표 등급", ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"])
+    
     if goal:
-        st.success(f"목표: {goal}")
+        st.success(f"🔥 목표: {goal}")
+    if target_grade != "선택하세요":
+        st.info(f"📈 다짐: 반드시 {target_grade} 달성!")
     
     st.divider()
-    st.header("⏳ D-Day 계산기")
-    d_day_name = st.text_input("시험 이름", placeholder="예: 기말고사, 모의고사")
-    d_day_date = st.date_input("시험 날짜를 선택하세요")
     
-    if d_day_name:
+    st.header("⏳ 기말고사 D-Day")
+    exam_name = st.text_input("시험 이름", value="2학기 기말고사")
+    exam_date = st.date_input("기말고사 날짜를 선택하세요")
+    
+    # D-Day 계산 로직
+    if exam_name:
         today = date.today()
-        delta = d_day_date - today
+        delta = exam_date - today
         if delta.days > 0:
-            st.info(f"**{d_day_name}**까지 **D-{delta.days}** 남았어요! 파이팅!")
+            st.error(f"🚨 **{exam_name}**까지 **D-{delta.days}** 남았습니다!")
+            st.progress(max(0, 100 - (delta.days * 2))) # 긴장감 주는 프로그레스 바
         elif delta.days == 0:
-            st.error(f"오늘은 **{d_day_name}** 당일입니다! 실력 발휘 제대로 해봐요!")
+            st.success(f"🎉 오늘은 **{exam_name}** 당일! 실력 발휘 제대로 하자!")
         else:
-            st.write(f"{d_day_name} 시험이 끝났습니다. 수고했어요!")
+            st.write(f"**{exam_name}**이 끝났습니다. 수고 많았어요!")
 
-# 3. 메인 화면 (제목 및 날짜)
-st.title("📚 나만의 스터디 플래너")
-st.subheader(f"오늘은 {date.today().strftime('%Y년 %m월 %d일')} 입니다.")
-st.write("---")
+# 3. 메인 화면: 달력(날짜 선택) & 일일 시간표
+st.markdown('<p class="main-title">✨ 프리미엄 스터디 플래너</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">달력에서 날짜를 선택하고 오늘 하루의 시간표를 설계하세요.</p>', unsafe_allow_html=True)
 
-# 4. 할 일 추가 섹션
-st.markdown("### ✨ 새로운 할 일 추가")
-col1, col2 = st.columns([1, 2])
-with col1:
-    subject = st.text_input("과목명", placeholder="예: 수학")
-with col2:
-    task = st.text_input("할 일 내용", placeholder="예: 확률과 통계 15쪽 풀기")
-
-if st.button("할 일 추가하기", use_container_width=True):
-    if subject and task:
-        st.session_state.todos.append({"subject": subject, "task": task, "done": False})
-        st.rerun() # 추가 후 화면 새로고침
-    else:
-        st.warning("과목명과 할 일을 모두 적어주세요!")
+# 달력 위젯 (여기서 날짜를 고르면 그날의 시간표가 뜸)
+selected_date = st.date_input("📅 달력 (날짜 선택)", value=date.today())
+date_str = str(selected_date)
 
 st.write("---")
+st.subheader(f"📝 {selected_date.strftime('%Y년 %m월 %d일')}의 시간표")
 
-# 5. 할 일 목록 및 타이머 섹션
-st.markdown("### 📝 오늘 할 일 및 타이머")
+# 선택한 날짜의 시간표 데이터가 없으면 기본 표 만들어주기
+if date_str not in st.session_state.schedules:
+    st.session_state.schedules[date_str] = pd.DataFrame({
+        "시간": ["09:00 - 10:30", "10:30 - 12:00", "13:00 - 15:00", "", ""],
+        "과목": ["수학", "영어", "국어", "", ""],
+        "학습 계획 (상세)": ["확률과 통계 기출 1회독", "영단어 100개 암기", "비문학 지문 3개 분석", "", ""],
+        "완료": [False, False, False, False, False]
+    })
 
-timer_col, list_col = st.columns([1, 2])
+# 노션(Notion) 스타일의 깔끔한 데이터 에디터 (표) 띄우기
+# 표 안의 내용을 마우스로 클릭해서 엑셀처럼 바로 수정하고 행을 추가(Dynamic) 할 수 있음
+edited_df = st.data_editor(
+    st.session_state.schedules[date_str],
+    num_rows="dynamic", # 밑에 빈칸을 계속 추가할 수 있는 기능
+    use_container_width=True,
+    column_config={
+        "시간": st.column_config.TextColumn("⏰ 시간 (예: 14:00-16:00)", width="small"),
+        "과목": st.column_config.TextColumn("📚 과목", width="small"),
+        "학습 계획 (상세)": st.column_config.TextColumn("📝 구체적인 학습 계획", width="large"),
+        "완료": st.column_config.CheckboxColumn("✅ 완료", default=False, width="small")
+    }
+)
 
-# [타이머(스톱워치) 기능]
-with timer_col:
-    st.info("⏱️ 집중 스톱워치")
-    
-    # 스톱워치 버튼 로직
-    if st.button("▶️ 공부 시작 (타이머 켜기)"):
-        if not st.session_state.is_running:
-            st.session_state.start_time = time.time() - st.session_state.elapsed_time
-            st.session_state.is_running = True
-            
-    if st.button("⏸️ 일시 정지"):
-        if st.session_state.is_running:
-            st.session_state.elapsed_time = time.time() - st.session_state.start_time
-            st.session_state.is_running = False
-            
-    if st.button("🔄 초기화"):
-        st.session_state.is_running = False
-        st.session_state.elapsed_time = 0
-        st.session_state.start_time = None
+# 수정한 시간표를 컴퓨터(세션)에 다시 저장
+st.session_state.schedules[date_str] = edited_df
 
-    # 현재 진행된 시간 계산
-    current_time = st.session_state.elapsed_time
-    if st.session_state.is_running:
-        current_time = time.time() - st.session_state.start_time
-
-    # 시간, 분, 초 계산해서 예쁘게 보여주기
-    hours = int(current_time // 3600)
-    minutes = int((current_time % 3600) // 60)
-    seconds = int(current_time % 60)
-    
-    st.metric(label="총 공부 시간", value=f"{hours:02d}:{minutes:02d}:{seconds:02d}")
-    
-    if st.session_state.is_running:
-        st.success("🔥 집중하는 중! 화면을 새로고침하면 시간이 업데이트됩니다.")
-
-# [할 일 체크리스트 기능]
-with list_col:
-    if len(st.session_state.todos) == 0:
-        st.write("아직 할 일이 없어요. 위에서 추가해 보세요!")
-    else:
-        for i, todo in enumerate(st.session_state.todos):
-            # 체크박스 생성
-            is_checked = st.checkbox(f"**[{todo['subject']}]** {todo['task']}", value=todo['done'], key=f"todo_{i}")
-            # 체크 상태 저장
-            st.session_state.todos[i]['done'] = is_checked
+# 오늘 얼마나 완료했는지 보여주는 기능
+total_tasks = len(edited_df[edited_df["과목"] != ""]) # 과목이 적혀있는 줄만 진짜 할 일로 계산
+if total_tasks > 0:
+    completed_tasks = edited_df["완료"].sum()
+    st.caption(f"오늘의 달성률: {completed_tasks} / {total_tasks} 완료")
+    if completed_tasks == total_tasks:
+        st.balloons() # 다 하면 풍선 날리기!

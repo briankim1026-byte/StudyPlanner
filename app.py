@@ -38,14 +38,16 @@ with st.sidebar:
     
     st.divider()
     
-    st.header("⚾ 오늘의 수학 타석")
+    # [수정됨] 세련된 이름과 전문적인 메시지로 변경
+    st.header("📐 일일 수학 달성도")
+    st.caption("매일 30문제 이상 꾸준히 푸는 것이 최상위권의 핵심입니다.")
     math_count = st.number_input("오늘 푼 수학 문제 수 (목표: 30)", min_value=0, max_value=200, value=0, step=1)
     
     st.progress(min(math_count / 30.0, 1.0))
     if math_count >= 30:
-        st.success("장외 홈런! ⚾ 오늘 수학 감각 완벽해!")
+        st.success("🔥 완벽합니다! 오늘 수학 목표치를 달성했어요.")
     elif math_count > 0:
-        st.info("안타! 계속 배트를 휘둘러보자.")
+        st.info("💡 좋은 페이스입니다. 끝까지 집중력을 유지하세요!")
         
     st.divider()
 
@@ -53,7 +55,7 @@ with st.sidebar:
     
     timer_html = """
     <div style="text-align:center; padding:10px; border-radius:12px; background:#ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;">
-        <h1 id="time" style="color:#d97706; font-size: 2.5rem; margin: 10px 0;">00:00</h1>
+        <h1 id="time" style="color:#2575fc; font-size: 2.5rem; margin: 10px 0;">00:00</h1>
         <div style="margin-bottom: 10px;">
             <input type="number" id="customMin" value="50" min="1" style="width: 60px; padding: 5px; border-radius: 5px; border: 1px solid #ccc; text-align: center; font-weight: bold;"> 분
         </div>
@@ -89,11 +91,11 @@ with st.sidebar:
     st.divider()
 
     st.header("📸 오늘 공부 인증")
-    st.caption("스터디 플래너나 다 푼 문제집을 찍어 올려봐!")
+    st.caption("스터디 플래너나 다 푼 문제집을 찍어 올려주세요.")
     uploaded_file = st.file_uploader("인증 사진 업로드", type=["jpg", "jpeg", "png"])
     
     if uploaded_file is not None:
-        st.image(uploaded_file, caption="오늘도 해냈다! 고생 많았어 🔥", use_container_width=True)
+        st.image(uploaded_file, caption="오늘도 해냈습니다! 고생 많으셨습니다 🔥", use_container_width=True)
         st.balloons()
 
 # ---------------------------------------------------------

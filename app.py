@@ -13,6 +13,8 @@ st.markdown("""
     .sub-title { font-size: 1.1rem; color: #495057; font-weight: 600; text-align: center; margin-bottom: 30px; }
     .stTextArea textarea { font-size: 0.95rem; line-height: 1.5; border-radius: 12px; border: 1.5px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.04); background-color: #ffffff; transition: all 0.2s ease; }
     .stTextArea textarea:focus { border-color: #2575fc; box-shadow: 0 0 8px rgba(37, 117, 252, 0.3); }
+    /* 체크박스 디자인 살짝 다듬기 */
+    .stCheckbox { margin-top: -10px; margin-bottom: 10px; padding-left: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -73,7 +75,6 @@ with st.sidebar:
 
     st.divider()
 
-    # 네가 요청한 직관적인 '인증사진 첨부' 박스
     st.header("📸 오늘 공부 인증")
     st.caption("아래 박스를 눌러서 사진을 바로 찍거나 올려주세요.")
     
@@ -114,7 +115,12 @@ for week in weeks:
                 st.markdown(f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
                 
                 key = f"memo_{day.strftime('%Y_%m_%d')}"
-                st.text_area(label=f"{day.month}월 {day.day}일 시간표", label_visibility="collapsed", key=key, height=150, placeholder="국어 1강\n수학 15p")
+                st.text_area(label=f"{day.month}월 {day.day}일 시간표", label_visibility="collapsed", key=key, height=130, placeholder="국어 1강\n수학 15p")
+                
+                # 새롭게 추가된 '하루 완료' 체크박스
+                chk_key = f"chk_{day.strftime('%Y_%m_%d')}"
+                if st.checkbox("✅ 하루 완료", key=chk_key):
+                    st.success("미션 클리어!")
             else:
                 st.write("")
     st.write("")

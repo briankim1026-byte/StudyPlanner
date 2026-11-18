@@ -44,15 +44,27 @@ def rollover_task(curr_d, next_d):
 with st.sidebar:
     st.header("🎯 나의 다짐")
     goal = st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과")
-    target_grade = st.selectbox("목표 등급", ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"])
+    
+    target_grade = st.selectbox(
+        "목표 등급", 
+        ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"]
+    )
     
     st.divider()
     
     st.header("⚾ 오늘의 수학 타석")
     st.caption("매일 30문제 타격 목표! 꾸준함이 생명이다.")
-    math_count = st.number_input("오늘 푼 수학 문제 수", min_value=0, max_value=200, value=0, step=1)
+    
+    math_count = st.number_input(
+        "오늘 푼 수학 문제 수", 
+        min_value=0, 
+        max_value=200, 
+        value=0, 
+        step=1
+    )
     
     st.progress(min(math_count / 30.0, 1.0))
+    
     if math_count >= 30:
         st.success("장외 홈런! ⚾ 오늘 수학 감각 완벽해!")
     elif math_count > 0:
@@ -63,7 +75,6 @@ with st.sidebar:
     st.header("🏀 하프타임 타이머")
     st.caption("50분 전력 질주 후 10분 휴식 (작전 타임)")
     
-    # 여기서부터 HTML 코드 덩어리
     timer_html = """
     <div style="text-align:center; padding:10px; border-radius:10px; background:#f3f4f6; border: 2px solid #e5e7eb;">
         <h1 id="time" style="color:#d97706; font-size: 2.5rem; margin: 10px 0;">50:00</h1>
@@ -108,21 +119,13 @@ weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "�
 header_cols = st.columns(7)
 for i, day_name in enumerate(weekdays):
     color = "red" if i == 6 else "#2563EB" if i == 5 else "#374151"
-    header_cols[i].markdown(f"<div style='text-align: center; font-weight: bold; color: {color}; padding-bottom: 10px;'>{day_name}</div>", unsafe_allow_html=True)
+    header_cols[i].markdown(
+        f"<div style='text-align: center; font-weight: bold; color: {color}; padding-bottom: 10px;'>{day_name}</div>", 
+        unsafe_allow_html=True
+    )
 
 st.write("---")
 
 for week in weeks:
     cols = st.columns(7)
     for i, day in enumerate(week):
-        with cols[i]:
-            if day is not None:
-                day_color = "red" if i == 6 else "#2563EB" if i == 5 else "black"
-                st.markdown(f"<div style='color: {day_color}; font-weight: bold; font-size: 1.1rem; margin-bottom: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
-                
-                key = f"memo_{day.strftime('%Y_%m_%d')}"
-                st.text_area(label=f"{day.month}월 {day.day}일 시간표", label_visibility="collapsed", key=key, height=140, placeholder="국어 1강\n수학 15p")
-                
-                if day < end_date:
-                    next_day = day + timedelta(days=1)
-                    st.button("

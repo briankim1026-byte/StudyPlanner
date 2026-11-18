@@ -5,7 +5,7 @@ from datetime import date, timedelta
 # 1. 화면 기본 설정
 st.set_page_config(page_title="프리미엄 스터디 플래너", layout="wide")
 
-# CSS (한 줄로 안전하게 처리)
+# CSS (한 줄로 안전하게 처리 및 첨부 박스 크기 최적화)
 st.markdown("""
     <style>
     .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #e0eaf5 100%); }
@@ -13,8 +13,9 @@ st.markdown("""
     .sub-title { font-size: 1.1rem; color: #495057; font-weight: 600; text-align: center; margin-bottom: 30px; }
     .stTextArea textarea { font-size: 0.95rem; line-height: 1.5; border-radius: 12px; border: 1.5px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.04); background-color: #ffffff; transition: all 0.2s ease; }
     .stTextArea textarea:focus { border-color: #2575fc; box-shadow: 0 0 8px rgba(37, 117, 252, 0.3); }
-    /* 체크박스 디자인 살짝 다듬기 */
     .stCheckbox { margin-top: -10px; margin-bottom: 10px; padding-left: 5px; }
+    /* 달력 안의 파일 업로드 박스가 너무 크지 않도록 조절 */
+    [data-testid="stFileUploadDropzone"] { padding: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -73,17 +74,6 @@ with st.sidebar:
     """
     components.html(timer_html, height=200)
 
-    st.divider()
-
-    st.header("📸 오늘 공부 인증")
-    st.caption("아래 박스를 눌러서 사진을 바로 찍거나 올려주세요.")
-    
-    uploaded_file = st.file_uploader("인증사진 첨부", type=["jpg", "jpeg", "png"])
-    
-    if uploaded_file is not None:
-        st.image(uploaded_file, caption="오늘도 해냈습니다! 🔥", use_container_width=True)
-        st.balloons()
-
 st.markdown('<p class="main-title">📅 기말고사 집중 달력</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 대비 시간표</p>', unsafe_allow_html=True)
 
@@ -114,13 +104,23 @@ for week in weeks:
                 day_color = "red" if i == 6 else "#2575fc" if i == 5 else "#343a40"
                 st.markdown(f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
                 
-                key = f"memo_{day.strftime('%Y_%m_%d')}"
-                st.text_area(label=f"{day.month}월 {day.day}일 시간표", label_visibility="collapsed", key=key, height=130, placeholder="국어 1강\n수학 15p")
+                # 1. 시간표 적는 칸
+                text_key = f"memo_{day.strftime('%Y_%m_%d')}"
+                st.text_area(label=f"{day.month}월 {day.day}일 시간표", label_visibility="collapsed", key=text_key, height=130, placeholder="국어 1강\n수학 15p")
                 
-                # 새롭게 추가된 '하루 완료' 체크박스
+                # 2. 하루 완료 체크박스
                 chk_key = f"chk_{day.strftime('%Y_%m_%d')}"
                 if st.checkbox("✅ 하루 완료", key=chk_key):
-                    st.success("미션 클리어!")
+                    st.success("달성!")
+                
+                # 3. 그날의 개별 사진 업로드 칸
+                photo_key = f"photo_{day.strftime('%Y_%m_%d')}"
+                st.caption("📸 사진 인증")
+                uploaded_file = st.file_uploader(f"{day.month}월 {day.day}일 인증", type=["jpg", "jpeg", "png"], key=photo_key, label_visibility="collapsed")
+                
+                # 사진을 올리면 캘린더 칸 안에 표시됨
+                if uploaded_file is not None:
+                    st.image(uploaded_file, use_container_width=True)
             else:
                 st.write("")
-    st.write("")
+    st.write("---") # 주 단위로 얇은 선을 그어줘서 칸이 헷갈리지 않게 함

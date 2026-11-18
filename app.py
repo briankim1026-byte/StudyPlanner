@@ -73,22 +73,15 @@ with st.sidebar:
 
     st.divider()
 
+    # 네가 요청한 직관적인 '인증사진 첨부' 박스
     st.header("📸 오늘 공부 인증")
-    st.caption("지금 바로 카메라로 찍거나 갤러리에서 올려주세요.")
+    st.caption("아래 박스를 눌러서 사진을 바로 찍거나 올려주세요.")
     
-    tab1, tab2 = st.tabs(["📷 바로 찍기", "📂 갤러리에서 올리기"])
+    uploaded_file = st.file_uploader("인증사진 첨부", type=["jpg", "jpeg", "png"])
     
-    with tab1:
-        camera_photo = st.camera_input("실시간 인증 사진 찍기", label_visibility="collapsed")
-        if camera_photo is not None:
-            st.image(camera_photo, caption="오늘도 해냈습니다! 🔥", use_container_width=True)
-            st.balloons()
-            
-    with tab2:
-        uploaded_file = st.file_uploader("인증 사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-        if uploaded_file is not None:
-            st.image(uploaded_file, caption="오늘도 해냈습니다! 🔥", use_container_width=True)
-            st.balloons()
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="오늘도 해냈습니다! 🔥", use_container_width=True)
+        st.balloons()
 
 st.markdown('<p class="main-title">📅 기말고사 집중 달력</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 대비 시간표</p>', unsafe_allow_html=True)
@@ -108,7 +101,6 @@ weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "�
 header_cols = st.columns(7)
 for i, day_name in enumerate(weekdays):
     color = "red" if i == 6 else "#2575fc" if i == 5 else "#495057"
-    # 문제가 되었던 f-string을 완전히 안전한 한 줄로 고침
     header_cols[i].markdown(f"<div style='text-align: center; font-weight: 800; color: {color}; padding-bottom: 10px;'>{day_name}</div>", unsafe_allow_html=True)
 
 st.write("---")
@@ -119,7 +111,6 @@ for week in weeks:
         with cols[i]:
             if day is not None:
                 day_color = "red" if i == 6 else "#2575fc" if i == 5 else "#343a40"
-                # 문제가 되었던 f-string을 완전히 안전한 한 줄로 고침
                 st.markdown(f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
                 
                 key = f"memo_{day.strftime('%Y_%m_%d')}"

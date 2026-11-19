@@ -15,12 +15,18 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-# 날짜 범위 설정
+# 날짜 범위 설정 (11/23 월요일 ~ 12/23 수요일)
 START_DATE = date(2026, 11, 23)
 END_DATE = date(2026, 12, 23)
 TOTAL_DAYS = (END_DATE - START_DATE).days + 1
 VALID_DATES = [START_DATE + timedelta(days=i) for i in range(TOTAL_DAYS)]
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+
+# 주차별 묶음 생성
+all_dates_padded = list(VALID_DATES)
+while len(all_dates_padded) % 7 != 0:
+    all_dates_padded.append(None)
+WEEKS = [all_dates_padded[i:i+7] for i in range(0, len(all_dates_padded), 7)]
 
 # 3. DB에서 기존 데이터 불러오기
 if "db_loaded" not in st.session_state:
@@ -38,12 +44,11 @@ if "db_loaded" not in st.session_state:
         st.session_state[f"chk_{dk}"] = bool(row.get("is_done", False))
         st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
 
-    if "memo_fixed_range" not in st.session_state or not st.session_state["memo_fixed_range"]:
+    if not st.session_state.get("memo_fixed_range"):
         st.session_state["memo_fixed_range"] = "07:00-24:00"
 
     st.session_state["db_loaded"] = True
 
-# 기본 선택 날짜
 if "selected_day" not in st.session_state:
     today = date.today()
     st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
@@ -66,9 +71,12 @@ def save_day(day_key):
 def select_day(target_date):
     st.session_state["selected_day"] = target_date
 
-# 5. 자동 시간표 계산 유틸리티
-def to_min(hhmm: str) -> int:
-    h, m = map(int, hhmm.split(":"))
+# 5. 유연한 시간 파서 ("7시", "8시 30분", "08:30", "24시" 모두 인식)
+TIME_PAT = r"(\d{1,2})\s*(?::\s*(\d{2})|시(?:\s*(\d{1,2})\s*분?)?)"
+
+def parse_time_groups(h_str, m1_str, m2_str) -> int:
+    h = int(h_str)
+    m = int(m1_str) if m1_str else (int(m2_str) if m2_str else 0)
     return h * 60 + m
 
 def to_hhmm(minutes: int) -> str:
@@ -76,77 +84,151 @@ def to_hhmm(minutes: int) -> str:
     m = minutes % 60
     return f"{h:02d}:{m:02d}"
 
+def parse_range(range_str: str):
+    m = re.search(rf"{TIME_PAT}\s*[-~]\s*{TIME_PAT}", range_str.strip())
+    if m:
+        s = parse_time_groups(m.group(1), m.group(2), m.group(3))
+        e = parse_time_groups(m.group(4), m.group(5), m.group(6))
+        if e > s:
+            return s, e
+    return 420, 1440  # 기본 07:00 ~ 24:00
+
 def parse_fixed_schedule(text: str):
     events = []
     for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
-        match = re.match(r"(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})\s*(.+)", line)
-        if match:
-            s_min = to_min(match.group(1))
-            e_min = to_min(match.group(2))
-            title = match.group(3).strip()
-            if e_min > s_min:
+        m = re.match(rf"{TIME_PAT}\s*[-~]\s*{TIME_PAT}\s*(.+)", line)
+        if m:
+            s_min = parse_time_groups(m.group(1), m.group(2), m.group(3))
+            e_min = parse_time_groups(m.group(4), m.group(5), m.group(6))
+            title = m.group(7).strip()
+            if e_min > s_min and title:
                 events.append((s_min, e_min, title))
     events.sort(key=lambda x: x[0])
     return events
 
-def parse_tasks(text: str):
+def get_free_slots(wake_min: int, sleep_min: int, fixed_events):
+    slots = []
+    cur = wake_min
+    for s, e, _ in fixed_events:
+        if s > cur:
+            slots.append([cur, min(s, sleep_min)])
+        cur = max(cur, e)
+    if cur < sleep_min:
+        slots.append([cur, sleep_min])
+    return slots
+
+def parse_weekly_tasks(text: str):
     tasks = []
     for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
-        match = re.search(r"(\d+)\s*분?$", line)
-        if match:
-            dur = int(match.group(1))
-            title = line[:match.start()].strip(" ,/-:")
+        # 총 시간 추출 (예: 5시간, 300분)
+        total_min = None
+        m_hr = re.search(r"(\d+)\s*시간", line)
+        m_min = re.search(r"(\d+)\s*분", line)
+        if m_hr:
+            total_min = int(m_hr.group(1)) * 60
+            line = re.sub(r"\d+\s*시간", "", line).strip()
+        elif m_min:
+            total_min = int(m_min.group(1))
+            line = re.sub(r"\d+\s*분", "", line).strip()
+
+        # 분량(숫자+단위) 추출 (예: 210문제, 70p, 14강, 7회)
+        m_qty = re.search(r"(\d+)\s*(문제|페이지|쪽|강|회|단원|개|p|P)", line)
+        if m_qty:
+            qty = int(m_qty.group(1))
+            unit = m_qty.group(2)
+            base_title = (line[:m_qty.start()] + line[m_qty.end():]).strip(" ,/-:")
         else:
-            dur = 60
-            title = line
-        if title and dur > 0:
-            tasks.append((title, dur))
+            qty, unit = None, ""
+            base_title = line.strip(" ,/-:")
+
+        if base_title:
+            tasks.append({
+                "title": base_title,
+                "qty": qty,
+                "unit": unit,
+                "total_min": total_min
+            })
     return tasks
 
-def build_auto_schedule(range_str: str, fixed_text: str, tasks_text: str, break_min: int = 10):
-    m = re.match(r"(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})", range_str.strip())
-    wake_min = to_min(m.group(1)) if m else 420
-    sleep_min = to_min(m.group(2)) if m else 1440
+def generate_weekly_schedule(week_dates, range_str: str, weekly_tasks_text: str, break_min: int = 10):
+    wake_min, sleep_min = parse_range(range_str)
+    active_days = [d for d in week_dates if d is not None]
+    n_days = len(active_days)
+    if n_days == 0:
+        return [], []
 
-    fixed_events = parse_fixed_schedule(fixed_text)
-    tasks = parse_tasks(tasks_text)
+    tasks = parse_weekly_tasks(weekly_tasks_text)
+    if not tasks:
+        return [], []
 
-    # 빈 시간 구간 계산
-    free_slots = []
-    cur = wake_min
-    for s, e, _ in fixed_events:
-        if s > cur:
-            free_slots.append([cur, min(s, sleep_min)])
-        cur = max(cur, e)
-    if cur < sleep_min:
-        free_slots.append([cur, sleep_min])
+    # 요일별 고정 일정 & 빈 시간 준비
+    day_fixed = {}
+    day_slots = {}
+    day_scheduled = {}
+    for d in active_days:
+        wd_idx = d.weekday()
+        f_txt = st.session_state.get(f"memo_fixed_{wd_idx}", "")
+        f_ev = parse_fixed_schedule(f_txt)
+        day_fixed[d] = f_ev
+        day_slots[d] = get_free_slots(wake_min, sleep_min, f_ev)
+        day_scheduled[d] = [(s, e, f"📌 {t}") for s, e, t in f_ev]
 
-    scheduled = [(s, e, f"📌 {t}") for s, e, t in fixed_events]
     unscheduled = []
 
-    for title, dur in tasks:
-        placed = False
-        # 통째로 들어갈 수 있는 빈 시간 찾기
-        for slot in free_slots:
-            if slot[1] - slot[0] >= dur:
-                start_t = slot[0]
-                end_t = start_t + dur
-                scheduled.append((start_t, end_t, f"📖 {title}"))
-                slot[0] = end_t + break_min
-                placed = True
-                break
-        if not placed:
-            unscheduled.append(f"{title} ({dur}분)")
+    # 각 주간 할 일을 이번 주 날짜들에 균등 분배
+    for task in tasks:
+        title = task["title"]
+        qty = task["qty"]
+        unit = task["unit"]
+        total_min = task["total_min"]
 
-    scheduled.sort(key=lambda x: x[0])
-    lines = [f"[{to_hhmm(s)} ~ {to_hhmm(e)}] {t}" for s, e, t in scheduled]
-    return "\n".join(lines), unscheduled
+        # 하루당 소요 시간 결정 (미입력 시 기본 하루 50분)
+        if total_min:
+            per_day_min = max(20, (total_min // n_days // 5) * 5)
+        else:
+            per_day_min = 50
+
+        # 분량이 있으면 날짜 수로 나누어 배분
+        if qty:
+            base_q = qty // n_days
+            rem_q = qty % n_days
+            daily_labels = []
+            for idx in range(n_days):
+                q_today = base_q + (1 if idx < rem_q else 0)
+                if q_today > 0:
+                    daily_labels.append((active_days[idx], f"{title} {q_today}{unit}"))
+        else:
+            daily_labels = [(d, title) for d in active_days]
+
+        # 각 날짜의 빈 시간에 배치
+        for d, label in daily_labels:
+            placed = False
+            for slot in day_slots[d]:
+                if slot[1] - slot[0] >= per_day_min:
+                    s_t = slot[0]
+                    e_t = s_t + per_day_min
+                    day_scheduled[d].append((s_t, e_t, f"📖 {label}"))
+                    slot[0] = e_t + break_min
+                    placed = True
+                    break
+            if not placed:
+                unscheduled.append(f"{d.month}/{d.day} {label} ({per_day_min}분)")
+
+    # 결과 저장
+    for d in active_days:
+        dk = d.strftime('%Y_%m_%d')
+        day_scheduled[d].sort(key=lambda x: x[0])
+        lines = [f"[{to_hhmm(s)} ~ {to_hhmm(e)}] {t}" for s, e, t in day_scheduled[d]]
+        st.session_state[f"memo_{dk}"] = "\n".join(lines)
+        save_day(dk)
+
+    return active_days, unscheduled
 
 # 6. Pretendard 폰트 + 카드 CSS
 st.markdown("""
@@ -155,68 +237,37 @@ st.markdown("""
     html, body, [class*="css"] {
         font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
-    .stApp {
-        background: linear-gradient(160deg, #f7f9fc 0%, #edf2fb 100%);
-    }
+    .stApp { background: linear-gradient(160deg, #f7f9fc 0%, #edf2fb 100%); }
     .main-title {
-        font-size: 2.3rem;
-        font-weight: 900;
+        font-size: 2.2rem; font-weight: 900;
         background: linear-gradient(45deg, #4f46e5, #0ea5e9);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 4px;
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        text-align: center; margin-bottom: 4px;
     }
-    .sub-title {
-        font-size: 1rem;
-        color: #64748b;
-        font-weight: 600;
-        text-align: center;
-        margin-bottom: 20px;
-    }
+    .sub-title { font-size: 1rem; color: #64748b; font-weight: 600; text-align: center; margin-bottom: 18px; }
     .stat-card {
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 16px 20px;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
-        border: 1px solid #e2e8f0;
-        text-align: center;
+        background: #ffffff; border-radius: 16px; padding: 14px 18px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05); border: 1px solid #e2e8f0; text-align: center;
     }
     .stat-label { font-size: 0.85rem; color: #64748b; font-weight: 600; margin-bottom: 4px; }
-    .stat-value { font-size: 1.45rem; font-weight: 800; color: #1e293b; }
-    .daily-box {
-        background: #ffffff;
-        border-radius: 18px;
-        padding: 20px 24px;
-        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
-        border: 1.5px solid #e2e8f0;
-        margin-bottom: 14px;
+    .stat-value { font-size: 1.4rem; font-weight: 800; color: #1e293b; }
+    .week-card {
+        border-radius: 14px; padding: 12px; min-height: 185px; margin-bottom: 8px;
+        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.04);
     }
-    .daily-box-done {
-        background: #f0fdf4;
-        border: 1.5px solid #86efac;
-    }
+    .week-date { font-weight: 800; font-size: 0.95rem; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .week-body { font-size: 0.78rem; color: #334155; line-height: 1.48; white-space: pre-wrap; word-break: break-word; }
     .cal-card {
-        border-radius: 12px;
-        padding: 10px 10px 8px 10px;
-        min-height: 92px;
-        margin-bottom: 6px;
-        transition: all 0.15s ease;
+        border-radius: 12px; padding: 8px 10px; min-height: 76px; margin-bottom: 6px;
         box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
     }
-    .cal-date { font-weight: 800; font-size: 0.95rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
-    .cal-preview { font-size: 0.78rem; color: #475569; line-height: 1.35; word-break: break-all; }
+    .cal-date { font-weight: 800; font-size: 0.9rem; margin-bottom: 3px; display: flex; justify-content: space-between; }
+    .cal-preview { font-size: 0.74rem; color: #475569; line-height: 1.3; word-break: break-all; }
     .stTextArea textarea {
-        font-size: 0.98rem;
-        line-height: 1.6;
-        border-radius: 12px;
-        border: 1.5px solid #cbd5e1;
-        background-color: #ffffff;
+        font-size: 0.95rem; line-height: 1.55; border-radius: 12px;
+        border: 1.5px solid #cbd5e1; background-color: #ffffff;
     }
-    .stTextArea textarea:focus {
-        border-color: #4f46e5;
-        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
-    }
+    .stTextArea textarea:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15); }
     [data-testid="stFileUploadDropzone"] { padding: 12px; }
     </style>
 """, unsafe_allow_html=True)
@@ -273,7 +324,7 @@ with st.sidebar:
 
 # 8. 상단 타이틀 & 대시보드
 st.markdown('<p class="main-title">✨ 기말고사 스터디 플래너</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 집중 프로젝트</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">11/23 ~ 12/23 주간 자동 배분 프로젝트</p>', unsafe_allow_html=True)
 
 today = date.today()
 d_day_diff = (END_DATE - today).days
@@ -302,67 +353,81 @@ st.write("")
 st.progress(done_days / TOTAL_DAYS)
 st.write("")
 
-# 9. [위쪽] 일일 집중 시간표
+# 현재 선택된 날짜가 속한 주차 찾기
 sel_day = st.session_state["selected_day"]
-sel_key = sel_day.strftime('%Y_%m_%d')
-sel_wd_idx = sel_day.weekday()
-sel_wd = WEEKDAY_KR[sel_wd_idx]
+current_week_idx = 0
+for idx, wk in enumerate(WEEKS):
+    if sel_day in wk:
+        current_week_idx = idx
+        break
 
-# 날짜 이동 바
-nav1, nav2, nav3 = st.columns([1, 3, 1])
-with nav1:
-    if sel_day > START_DATE:
-        st.button("◀ 이전 날", use_container_width=True, on_click=select_day, args=(sel_day - timedelta(days=1),))
-with nav2:
-    date_labels = [f"{d.month}월 {d.day}일 ({WEEKDAY_KR[d.weekday()]})" + (" · 오늘" if d == today else "") for d in VALID_DATES]
-    current_idx = VALID_DATES.index(sel_day)
-    picked_label = st.selectbox("날짜 선택", date_labels, index=current_idx, label_visibility="collapsed")
-    picked_date = VALID_DATES[date_labels.index(picked_label)]
-    if picked_date != sel_day:
-        st.session_state["selected_day"] = picked_date
-        st.rerun()
-with nav3:
-    if sel_day < END_DATE:
-        st.button("다음 날 ▶", use_container_width=True, on_click=select_day, args=(sel_day + timedelta(days=1),))
+week_labels = []
+for idx, wk in enumerate(WEEKS):
+    valid_w = [d for d in wk if d is not None]
+    week_labels.append(f"{idx+1}주차 ({valid_w[0].month}/{valid_w[0].day} ~ {valid_w[-1].month}/{valid_w[-1].day})")
 
-# 요일별 고정 시간표 설정 & 자동 생성기
+picked_week_label = st.selectbox("📅 주차 선택", week_labels, index=current_week_idx)
+picked_week_idx = week_labels.index(picked_week_label)
+if picked_week_idx != current_week_idx:
+    first_valid = [d for d in WEEKS[picked_week_idx] if d is not None][0]
+    st.session_state["selected_day"] = first_valid
+    st.rerun()
+
+active_week = WEEKS[picked_week_idx]
+
+# 9. 고정 시간표 설정 (평일 일괄 지원) & 주간 자동 배분
 t1, t2 = st.columns(2)
 with t1:
-    with st.expander("⚙️ 요일별 고정 시간표 설정 (월~일)", expanded=False):
-        st.text_input("기상~취침 시간 (예: 07:00-24:00)", key="memo_fixed_range", on_change=save_day, args=("fixed_range",))
-        edit_wd = st.selectbox("설정할 요일", WEEKDAY_KR, index=sel_wd_idx)
-        edit_wd_idx = WEEKDAY_KR.index(edit_wd)
-        fixed_key = f"fixed_{edit_wd_idx}"
-        if f"memo_{fixed_key}" not in st.session_state:
-            st.session_state[f"memo_{fixed_key}"] = ""
-        st.caption(f"{edit_wd}요일 고정 일정 (형식: 08:30-16:00 학교)")
-        st.text_area(
-            f"{edit_wd}요일 고정 일정",
-            key=f"memo_{fixed_key}",
-            height=130,
-            label_visibility="collapsed",
-            on_change=save_day,
-            args=(fixed_key,)
-        )
+    with st.expander("⚙️ 고정 시간표 설정 (평일 일괄 / 요일별)", expanded=False):
+        st.text_input("기상~취침 시간 (예: 7시-24시 또는 07:00-24:00)", key="memo_fixed_range", on_change=save_day, args=("fixed_range",))
+        target_opt = st.selectbox("설정할 요일", ["평일 전체 (월~금)"] + WEEKDAY_KR)
+
+        if target_opt == "평일 전체 (월~금)":
+            default_weekday_txt = st.session_state.get("memo_fixed_0", "")
+            st.caption("평일 공통 고정 일정 (예: 8시-16시 학교)")
+            bulk_txt = st.text_area("평일 공통 고정 일정", value=default_weekday_txt, height=120, label_visibility="collapsed")
+            if st.button("💾 평일(월~금)에 한꺼번에 저장", use_container_width=True):
+                for wd_i in range(5):
+                    fk = f"fixed_{wd_i}"
+                    st.session_state[f"memo_{fk}"] = bulk_txt
+                    save_day(fk)
+                st.success("월~금 고정 시간표가 모두 저장됐어요!")
+        else:
+            edit_wd_idx = WEEKDAY_KR.index(target_opt)
+            fk = f"fixed_{edit_wd_idx}"
+            if f"memo_{fk}" not in st.session_state:
+                st.session_state[f"memo_{fk}"] = ""
+            st.caption(f"{target_opt}요일 고정 일정 (예: 8시-16시 학교)")
+            st.text_area(
+                f"{target_opt}요일 고정 일정",
+                key=f"memo_{fk}",
+                height=120,
+                label_visibility="collapsed",
+                on_change=save_day,
+                args=(fk,)
+            )
 
 with t2:
-    with st.expander(f"⚡ {sel_wd}요일 고정 일정 바탕 자동 시간표 짜기", expanded=False):
-        st.caption("할 일과 소요 시간(분)을 한 줄씩 입력 (형식: 수학 30문제 90분)")
-        tasks_input = st.text_area(
-            "오늘 할 일 목록",
-            key=f"tasks_input_{sel_key}",
+    with st.expander(f"⚡ {picked_week_idx+1}주차 할 일 입력 → 주간 시간표 자동 짜기", expanded=False):
+        wk_task_key = f"week_tasks_{picked_week_idx}"
+        if f"memo_{wk_task_key}" not in st.session_state:
+            st.session_state[f"memo_{wk_task_key}"] = ""
+        st.caption("이번 주 할 일과 분량을 한 줄씩 입력 (예: 수학 210문제 / 국어 교과서 70p)")
+        st.text_area(
+            "이번 주 할 일",
+            key=f"memo_{wk_task_key}",
             height=120,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            on_change=save_day,
+            args=(wk_task_key,)
         )
         break_min = st.number_input("과목 사이 휴식 시간(분)", min_value=0, max_value=30, value=10, step=5)
-        if st.button("⚡ 빈 시간에 자동 배치하기", use_container_width=True, type="primary"):
-            wd_fixed_text = st.session_state.get(f"memo_fixed_{sel_wd_idx}", "")
-            range_text = st.session_state.get("memo_fixed_range", "07:00-24:00")
-            result_schedule, unscheduled = build_auto_schedule(range_text, wd_fixed_text, tasks_input, int(break_min))
-            st.session_state[f"memo_{sel_key}"] = result_schedule
-            save_day(sel_key)
+        if st.button("⚡ 이번 주(월~일) 시간표 자동 배분하기", use_container_width=True, type="primary"):
+            range_txt = st.session_state.get("memo_fixed_range", "07:00-24:00")
+            wk_txt = st.session_state.get(f"memo_{wk_task_key}", "")
+            _, unscheduled = generate_weekly_schedule(active_week, range_txt, wk_txt, int(break_min))
             if unscheduled:
-                st.session_state["schedule_warn"] = "시간이 부족해 배치하지 못한 할 일: " + ", ".join(unscheduled)
+                st.session_state["schedule_warn"] = "빈 시간이 부족해 일부 배치를 못 했어요: " + ", ".join(unscheduled[:5])
             else:
                 st.session_state["schedule_warn"] = ""
             st.rerun()
@@ -371,7 +436,45 @@ if st.session_state.get("schedule_warn"):
     st.warning(st.session_state["schedule_warn"])
     st.session_state["schedule_warn"] = ""
 
-# 선택된 날의 세션 키 초기화
+# 10. [위쪽] 주간 시간표 (월~일)
+st.markdown(f"### 📋 {week_labels[picked_week_idx]} 주간 시간표")
+w_cols = st.columns(7)
+for i, day in enumerate(active_week):
+    with w_cols[i]:
+        if day is not None:
+            dk = day.strftime('%Y_%m_%d')
+            memo_txt = st.session_state.get(f"memo_{dk}", "").strip()
+            is_done = st.session_state.get(f"chk_{dk}", False)
+            has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
+
+            if day == sel_day:
+                bg, border = "#eef2ff", "2px solid #4f46e5"
+            elif is_done:
+                bg, border = "#ecfdf5", "1.5px solid #6ee7b7"
+            elif day == today:
+                bg, border = "#fffbeb", "2px solid #f59e0b"
+            else:
+                bg, border = "#ffffff", "1px solid #e2e8f0"
+
+            day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
+            icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
+
+            st.markdown(f"""
+                <div class="week-card" style="background:{bg}; border:{border};">
+                    <div class="week-date" style="color:{day_color};">
+                        <span>{day.month}/{day.day} ({WEEKDAY_KR[i]})</span>
+                        <span>{icons}</span>
+                    </div>
+                    <div class="week-body">{memo_txt}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            st.button("상세/인증", key=f"wk_btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
+        else:
+            st.write("")
+
+# 11. [중간] 선택한 날 상세 수정 · 완료 체크 · 사진 인증
+sel_key = sel_day.strftime('%Y_%m_%d')
+sel_wd = WEEKDAY_KR[sel_day.weekday()]
 memo_key = f"memo_{sel_key}"
 chk_key = f"chk_{sel_key}"
 if memo_key not in st.session_state:
@@ -379,26 +482,15 @@ if memo_key not in st.session_state:
 if chk_key not in st.session_state:
     st.session_state[chk_key] = False
 
-is_sel_done = st.session_state[chk_key]
-box_class = "daily-box daily-box-done" if is_sel_done else "daily-box"
-status_badge = "🎉 오늘 목표 완료!" if is_sel_done else ""
-
-st.markdown(f"""
-    <div class="{box_class}">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:1.35rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 일일 시간표</span>
-            <span style="font-size:0.9rem; font-weight:700; color:#15803d;">{status_badge}</span>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
+st.write("")
 d_left, d_right = st.columns([3, 2], gap="large")
-
 with d_left:
+    st.markdown(f"**📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 하루 분량 수정**")
     st.text_area(
-        label="오늘 할 일 & 시간표",
+        label="하루 분량",
         key=memo_key,
-        height=230,
+        height=190,
+        label_visibility="collapsed",
         on_change=save_day,
         args=(sel_key,)
     )
@@ -435,20 +527,14 @@ with d_right:
 
 st.divider()
 
-# 10. [아래쪽] 한눈에 보는 컴팩트 월별 달력
+# 12. [아래쪽] 한눈에 보는 전체 달력
 st.markdown("### 🗓️ 한눈에 보는 전체 달력")
-
-all_dates = list(VALID_DATES)
-while len(all_dates) % 7 != 0:
-    all_dates.append(None)
-weeks = [all_dates[i:i+7] for i in range(0, len(all_dates), 7)]
-
 header_cols = st.columns(7)
-for i, day_name in enumerate(["월", "화", "수", "목", "금", "토", "일"]):
+for i, day_name in enumerate(WEEKDAY_KR):
     color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#475569"
     header_cols[i].markdown(f"<div style='text-align:center; font-weight:800; color:{color}; padding-bottom:6px;'>{day_name}</div>", unsafe_allow_html=True)
 
-for week in weeks:
+for week in WEEKS:
     cols = st.columns(7)
     for i, day in enumerate(week):
         with cols[i]:
@@ -459,33 +545,27 @@ for week in weeks:
                 has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
 
                 if day == sel_day:
-                    bg_color = "#eef2ff"
-                    border_style = "2px solid #4f46e5"
+                    bg, border = "#eef2ff", "2px solid #4f46e5"
                 elif is_done:
-                    bg_color = "#ecfdf5"
-                    border_style = "1.5px solid #6ee7b7"
+                    bg, border = "#ecfdf5", "1.5px solid #6ee7b7"
                 elif day == today:
-                    bg_color = "#fffbeb"
-                    border_style = "2px solid #f59e0b"
+                    bg, border = "#fffbeb", "2px solid #f59e0b"
                 else:
-                    bg_color = "#ffffff"
-                    border_style = "1px solid #e2e8f0"
+                    bg, border = "#ffffff", "1px solid #e2e8f0"
 
                 day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
                 icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
-                preview = (memo_txt.replace("\n", " ")[:24] + "…") if len(memo_txt) > 24 else memo_txt.replace("\n", " ")
+                preview = (memo_txt.replace("\n", " ")[:22] + "…") if len(memo_txt) > 22 else memo_txt.replace("\n", " ")
 
                 st.markdown(f"""
-                    <div class="cal-card" style="background:{bg_color}; border:{border_style};">
+                    <div class="cal-card" style="background:{bg}; border:{border};">
                         <div class="cal-date" style="color:{day_color};">
                             <span>{day.month}/{day.day}{' 🔥' if day == today else ''}</span>
-                            <span style="font-size:0.85rem;">{icons}</span>
+                            <span style="font-size:0.8rem;">{icons}</span>
                         </div>
                         <div class="cal-preview">{preview}</div>
                     </div>
                 """, unsafe_allow_html=True)
-
-                btn_label = "선택됨" if day == sel_day else "열기"
-                st.button(btn_label, key=f"btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
+                st.button("열기", key=f"cal_btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
             else:
                 st.write("")

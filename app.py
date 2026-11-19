@@ -14,9 +14,15 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-# 3. DB에서 기존 데이터 불러오기 (새로고침/재접속 시 자동 복원)
+# 날짜 범위 설정
+START_DATE = date(2026, 11, 23)
+END_DATE = date(2026, 12, 23)
+TOTAL_DAYS = (END_DATE - START_DATE).days + 1
+VALID_DATES = [START_DATE + timedelta(days=i) for i in range(TOTAL_DAYS)]
+WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+
+# 3. DB에서 기존 데이터 불러오기
 if "db_loaded" not in st.session_state:
-    # 사이드바 설정 불러오기
     res_set = supabase.table("user_settings").select("*").eq("id", 1).execute()
     if res_set.data:
         row = res_set.data[0]
@@ -28,7 +34,6 @@ if "db_loaded" not in st.session_state:
         st.session_state["target_grade"] = "선택하세요"
         st.session_state["math_count"] = 0
 
-    # 날짜별 기록 불러오기
     res_logs = supabase.table("daily_logs").select("*").execute()
     for row in res_logs.data:
         dk = row["day_key"]
@@ -37,6 +42,11 @@ if "db_loaded" not in st.session_state:
         st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
 
     st.session_state["db_loaded"] = True
+
+# 기본 선택 날짜 (오늘이 기간 안이면 오늘, 아니면 11/23)
+if "selected_day" not in st.session_state:
+    today = date.today()
+    st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
 
 # 4. 자동 저장 함수
 def save_settings():
@@ -55,19 +65,83 @@ def save_day(day_key):
         "photo_url": st.session_state.get(f"photo_url_{day_key}", "")
     }).execute()
 
-# CSS (한 줄로 안전하게 처리 및 첨부 박스 크기 최적화)
+def select_day(target_date):
+    st.session_state["selected_day"] = target_date
+
+# 5. Pretendard 폰트 + 깔끔한 화이트/파스텔 카드 CSS
 st.markdown("""
     <style>
-    .stApp { background: linear-gradient(135deg, #f8f9fa 0%, #e0eaf5 100%); }
-    .main-title { font-size: 2.8rem; font-weight: 900; background: -webkit-linear-gradient(45deg, #6a11cb, #2575fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-align: center; margin-bottom: 5px; }
-    .sub-title { font-size: 1.1rem; color: #495057; font-weight: 600; text-align: center; margin-bottom: 30px; }
-    .stTextArea textarea { font-size: 0.95rem; line-height: 1.5; border-radius: 12px; border: 1.5px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.04); background-color: #ffffff; transition: all 0.2s ease; }
-    .stTextArea textarea:focus { border-color: #2575fc; box-shadow: 0 0 8px rgba(37, 117, 252, 0.3); }
-    .stCheckbox { margin-top: -10px; margin-bottom: 10px; padding-left: 5px; }
-    [data-testid="stFileUploadDropzone"] { padding: 15px; }
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    html, body, [class*="css"] {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+    .stApp {
+        background: linear-gradient(160deg, #f7f9fc 0%, #edf2fb 100%);
+    }
+    .main-title {
+        font-size: 2.3rem;
+        font-weight: 900;
+        background: linear-gradient(45deg, #4f46e5, #0ea5e9);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        text-align: center;
+        margin-bottom: 4px;
+    }
+    .sub-title {
+        font-size: 1rem;
+        color: #64748b;
+        font-weight: 600;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .stat-card {
+        background: #ffffff;
+        border-radius: 16px;
+        padding: 16px 20px;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+        border: 1px solid #e2e8f0;
+        text-align: center;
+    }
+    .stat-label { font-size: 0.85rem; color: #64748b; font-weight: 600; margin-bottom: 4px; }
+    .stat-value { font-size: 1.45rem; font-weight: 800; color: #1e293b; }
+    .daily-box {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 20px 24px;
+        box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+        border: 1.5px solid #e2e8f0;
+        margin-bottom: 14px;
+    }
+    .daily-box-done {
+        background: #f0fdf4;
+        border: 1.5px solid #86efac;
+    }
+    .cal-card {
+        border-radius: 12px;
+        padding: 10px 10px 8px 10px;
+        min-height: 92px;
+        margin-bottom: 6px;
+        transition: all 0.15s ease;
+        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+    }
+    .cal-date { font-weight: 800; font-size: 0.95rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+    .cal-preview { font-size: 0.78rem; color: #475569; line-height: 1.35; word-break: break-all; }
+    .stTextArea textarea {
+        font-size: 0.98rem;
+        line-height: 1.6;
+        border-radius: 12px;
+        border: 1.5px solid #cbd5e1;
+        background-color: #ffffff;
+    }
+    .stTextArea textarea:focus {
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    [data-testid="stFileUploadDropzone"] { padding: 12px; }
     </style>
 """, unsafe_allow_html=True)
 
+# 6. 사이드바 (기존 기능 유지)
 with st.sidebar:
     st.header("🎯 나의 다짐")
     st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과", key="goal", on_change=save_settings)
@@ -92,12 +166,12 @@ with st.sidebar:
 
     st.header("⏱️ 맞춤형 집중 타이머")
     timer_html = """
-    <div style='text-align:center; padding:10px; border-radius:12px; background:#ffffff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e5e7eb;'>
-        <h1 id='time' style='color:#2575fc; font-size: 2.5rem; margin: 10px 0;'>00:00</h1>
+    <div style='text-align:center; padding:12px; border-radius:14px; background:#ffffff; box-shadow: 0 4px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; font-family: Pretendard, sans-serif;'>
+        <h1 id='time' style='color:#4f46e5; font-size: 2.4rem; margin: 8px 0;'>00:00</h1>
         <div style='margin-bottom: 10px;'>
-            <input type='number' id='customMin' value='50' min='1' style='width: 60px; padding: 5px; border-radius: 5px; border: 1px solid #ccc; text-align: center; font-weight: bold;'> 분
+            <input type='number' id='customMin' value='50' min='1' style='width: 60px; padding: 5px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center; font-weight: bold;'> 분
         </div>
-        <button onclick='startCustomTimer()' style='padding:8px 12px; margin:2px; cursor:pointer; background:linear-gradient(45deg, #2563eb, #3b82f6); color:white; border:none; border-radius:8px; font-weight:bold;'>🔥 집중 시작</button>
+        <button onclick='startCustomTimer()' style='padding:8px 12px; margin:2px; cursor:pointer; background:linear-gradient(45deg, #4f46e5, #6366f1); color:white; border:none; border-radius:8px; font-weight:bold;'>🔥 집중 시작</button>
         <button onclick='startTimer(10)' style='padding:8px 12px; margin:2px; cursor:pointer; background:linear-gradient(45deg, #10b981, #34d399); color:white; border:none; border-radius:8px; font-weight:bold;'>💧 10분 휴식</button>
         <script>
             let timer;
@@ -126,88 +200,187 @@ with st.sidebar:
     """
     components.html(timer_html, height=200)
 
-st.markdown('<p class="main-title">📅 기말고사 집중 달력</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 대비 시간표</p>', unsafe_allow_html=True)
+# 7. 상단 타이틀 & 동기부여 대시보드
+st.markdown('<p class="main-title">✨ 기말고사 스터디 플래너</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 집중 프로젝트</p>', unsafe_allow_html=True)
 
-start_date = date(2026, 11, 23)
-end_date = date(2026, 12, 23)
-total_days = (end_date - start_date).days + 1
-valid_dates = [start_date + timedelta(days=i) for i in range(total_days)]
+today = date.today()
+d_day_diff = (END_DATE - today).days
+d_day_str = f"D-{d_day_diff}" if d_day_diff > 0 else ("D-DAY 🔥" if d_day_diff == 0 else f"D+{abs(d_day_diff)}")
 
-all_dates = list(valid_dates)
+done_days = sum(1 for d in VALID_DATES if st.session_state.get(f"chk_{d.strftime('%Y_%m_%d')}", False))
+done_pct = int((done_days / TOTAL_DAYS) * 100)
+goal_display = st.session_state.get("goal", "").strip() or "목표를 입력해 보세요!"
+
+m1, m2, m3 = st.columns(3)
+with m1:
+    st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-label">🔥 기말고사 종료까지 (12/23)</div>
+            <div class="stat-value" style="color:#4f46e5;">{d_day_str}</div>
+        </div>
+    """, unsafe_allow_html=True)
+with m2:
+    st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-label">✅ 전체 달성률</div>
+            <div class="stat-value" style="color:#10b981;">{done_days} / {TOTAL_DAYS}일 ({done_pct}%)</div>
+        </div>
+    """, unsafe_allow_html=True)
+with m3:
+    st.markdown(f"""
+        <div class="stat-card">
+            <div class="stat-label">🎯 나의 최종 목표</div>
+            <div class="stat-value" style="font-size:1.15rem; color:#334155;">{goal_display}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+st.write("")
+st.progress(done_days / TOTAL_DAYS)
+st.write("")
+
+# 8. [위쪽] 일일 집중 시간표 (Daily Focus View)
+sel_day = st.session_state["selected_day"]
+sel_key = sel_day.strftime('%Y_%m_%d')
+sel_wd = WEEKDAY_KR[sel_day.weekday()]
+
+# 날짜 이동 바
+nav1, nav2, nav3 = st.columns([1, 3, 1])
+with nav1:
+    if sel_day > START_DATE:
+        st.button("◀ 이전 날", use_container_width=True, on_click=select_day, args=(sel_day - timedelta(days=1),))
+with nav2:
+    date_labels = [f"{d.month}월 {d.day}일 ({WEEKDAY_KR[d.weekday()]})" + (" · 오늘" if d == today else "") for d in VALID_DATES]
+    current_idx = VALID_DATES.index(sel_day)
+    picked_label = st.selectbox("날짜 선택", date_labels, index=current_idx, label_visibility="collapsed")
+    picked_date = VALID_DATES[date_labels.index(picked_label)]
+    if picked_date != sel_day:
+        st.session_state["selected_day"] = picked_date
+        st.rerun()
+with nav3:
+    if sel_day < END_DATE:
+        st.button("다음 날 ▶", use_container_width=True, on_click=select_day, args=(sel_day + timedelta(days=1),))
+
+# 선택된 날의 세션 키 초기화
+memo_key = f"memo_{sel_key}"
+chk_key = f"chk_{sel_key}"
+if memo_key not in st.session_state:
+    st.session_state[memo_key] = ""
+if chk_key not in st.session_state:
+    st.session_state[chk_key] = False
+
+is_sel_done = st.session_state[chk_key]
+box_class = "daily-box daily-box-done" if is_sel_done else "daily-box"
+status_badge = "🎉 오늘 목표 완료!" if is_sel_done else "📝 오늘의 계획을 채워보세요"
+
+st.markdown(f"""
+    <div class="{box_class}">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:1.35rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 일일 시간표</span>
+            <span style="font-size:0.9rem; font-weight:700; color:{'#15803d' if is_sel_done else '#4f46e5'};">{status_badge}</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+d_left, d_right = st.columns([3, 2], gap="large")
+
+with d_left:
+    st.text_area(
+        label="오늘 할 일 & 시간표",
+        key=memo_key,
+        height=230,
+        placeholder="예시)\n[09:00 ~ 11:00] 국어 문학 2강 + 기출 정리\n[13:00 ~ 15:00] 수학 수1 30문제 풀기\n[16:00 ~ 18:00] 영어 단어 50개 암기",
+        on_change=save_day,
+        args=(sel_key,)
+    )
+    st.checkbox("✅ 오늘 하루 목표 완료!", key=chk_key, on_change=save_day, args=(sel_key,))
+
+with d_right:
+    st.markdown("**📸 오늘의 공부 인증 사진**")
+    saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
+    if saved_url:
+        st.image(saved_url, use_container_width=True)
+    else:
+        st.info("아직 등록된 인증 사진이 없어요. 아래에서 사진을 올려보세요!")
+
+    with st.expander("📤 사진 올리기 / 변경하기", expanded=False):
+        uploaded_file = st.file_uploader(
+            "인증 사진 선택",
+            type=["jpg", "jpeg", "png"],
+            key=f"photo_{sel_key}",
+            label_visibility="collapsed"
+        )
+        if uploaded_file is not None:
+            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+            if st.session_state.get(f"last_uploaded_{sel_key}") != file_id:
+                ext = uploaded_file.name.split(".")[-1].lower()
+                file_path = f"{sel_key}_{int(time.time())}.{ext}"
+                supabase.storage.from_("photos").upload(
+                    file_path,
+                    uploaded_file.getvalue(),
+                    {"content-type": uploaded_file.type}
+                )
+                public_url = supabase.storage.from_("photos").get_public_url(file_path)
+                st.session_state[f"photo_url_{sel_key}"] = public_url
+                st.session_state[f"last_uploaded_{sel_key}"] = file_id
+                save_day(sel_key)
+                st.rerun()
+
+st.divider()
+
+# 9. [아래쪽] 한눈에 보는 컴팩트 월별 달력
+st.markdown("### 🗓️ 한눈에 보는 전체 달력 (클릭해서 날짜 이동)")
+st.caption("완료한 날은 초록색으로 표시돼요. 날짜 아래 버튼을 누르면 위쪽 일일 시간표에서 바로 수정할 수 있어요.")
+
+all_dates = list(VALID_DATES)
 while len(all_dates) % 7 != 0:
     all_dates.append(None)
-
 weeks = [all_dates[i:i+7] for i in range(0, len(all_dates), 7)]
-weekdays = ["월요일", "화요일", "수요일", "목요일", "금요일", "토요일", "일요일"]
 
 header_cols = st.columns(7)
-for i, day_name in enumerate(weekdays):
-    color = "red" if i == 6 else "#2575fc" if i == 5 else "#495057"
-    header_cols[i].markdown(f"<div style='text-align: center; font-weight: 800; color: {color}; padding-bottom: 10px;'>{day_name}</div>", unsafe_allow_html=True)
-
-st.write("---")
+for i, day_name in enumerate(["월", "화", "수", "목", "금", "토", "일"]):
+    color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#475569"
+    header_cols[i].markdown(f"<div style='text-align:center; font-weight:800; color:{color}; padding-bottom:6px;'>{day_name}</div>", unsafe_allow_html=True)
 
 for week in weeks:
     cols = st.columns(7)
     for i, day in enumerate(week):
         with cols[i]:
             if day is not None:
-                day_key = day.strftime('%Y_%m_%d')
-                day_color = "red" if i == 6 else "#2575fc" if i == 5 else "#343a40"
-                st.markdown(f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
-                
-                # 1. 시간표 적는 칸
-                text_key = f"memo_{day_key}"
-                if text_key not in st.session_state:
-                    st.session_state[text_key] = ""
-                st.text_area(
-                    label=f"{day.month}월 {day.day}일 시간표",
-                    label_visibility="collapsed",
-                    key=text_key,
-                    height=130,
-                    placeholder="국어 1강\n수학 15p",
-                    on_change=save_day,
-                    args=(day_key,)
-                )
-                
-                # 2. 하루 완료 체크박스
-                chk_key = f"chk_{day_key}"
-                if chk_key not in st.session_state:
-                    st.session_state[chk_key] = False
-                if st.checkbox("✅ 하루 완료", key=chk_key, on_change=save_day, args=(day_key,)):
-                    st.success("달성!")
-                
-                # 3. 그날의 개별 사진 업로드 칸
-                photo_key = f"photo_{day_key}"
-                st.caption("📸 사진 인증")
-                uploaded_file = st.file_uploader(
-                    f"{day.month}월 {day.day}일 인증",
-                    type=["jpg", "jpeg", "png"],
-                    key=photo_key,
-                    label_visibility="collapsed"
-                )
-                
-                # 새 사진을 올리면 Supabase 스토리지에 업로드 후 URL 저장
-                if uploaded_file is not None:
-                    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-                    if st.session_state.get(f"last_uploaded_{day_key}") != file_id:
-                        ext = uploaded_file.name.split(".")[-1].lower()
-                        file_path = f"{day_key}_{int(time.time())}.{ext}"
-                        supabase.storage.from_("photos").upload(
-                            file_path,
-                            uploaded_file.getvalue(),
-                            {"content-type": uploaded_file.type}
-                        )
-                        public_url = supabase.storage.from_("photos").get_public_url(file_path)
-                        st.session_state[f"photo_url_{day_key}"] = public_url
-                        st.session_state[f"last_uploaded_{day_key}"] = file_id
-                        save_day(day_key)
-                
-                # 저장된 사진이 있으면 캘린더 칸 안에 표시
-                saved_url = st.session_state.get(f"photo_url_{day_key}", "")
-                if saved_url:
-                    st.image(saved_url, use_container_width=True)
+                dk = day.strftime('%Y_%m_%d')
+                memo_txt = st.session_state.get(f"memo_{dk}", "").strip()
+                is_done = st.session_state.get(f"chk_{dk}", False)
+                has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
+
+                # 카드 배경 및 테두리 스타일
+                if day == sel_day:
+                    bg_color = "#eef2ff"
+                    border_style = "2px solid #4f46e5"
+                elif is_done:
+                    bg_color = "#ecfdf5"
+                    border_style = "1.5px solid #6ee7b7"
+                elif day == today:
+                    bg_color = "#fffbeb"
+                    border_style = "2px solid #f59e0b"
+                else:
+                    bg_color = "#ffffff"
+                    border_style = "1px solid #e2e8f0"
+
+                day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
+                icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
+                preview = (memo_txt.replace("\n", " ")[:24] + "…") if len(memo_txt) > 24 else (memo_txt.replace("\n", " ") or "<span style='color:#cbd5e1;'>비어 있음</span>")
+
+                st.markdown(f"""
+                    <div class="cal-card" style="background:{bg_color}; border:{border_style};">
+                        <div class="cal-date" style="color:{day_color};">
+                            <span>{day.month}/{day.day}{' 🔥' if day == today else ''}</span>
+                            <span style="font-size:0.85rem;">{icons}</span>
+                        </div>
+                        <div class="cal-preview">{preview}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                btn_label = "선택됨" if day == sel_day else "열기"
+                st.button(btn_label, key=f"btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
             else:
                 st.write("")
-    st.write("---")

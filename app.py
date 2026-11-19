@@ -202,4 +202,12 @@ for week in weeks:
                         public_url = supabase.storage.from_("photos").get_public_url(file_path)
                         st.session_state[f"photo_url_{day_key}"] = public_url
                         st.session_state[f"last_uploaded_{day_key}"] = file_id
-                        save_day(day_key
+                        save_day(day_key)
+                
+                # 저장된 사진이 있으면 캘린더 칸 안에 표시
+                saved_url = st.session_state.get(f"photo_url_{day_key}", "")
+                if saved_url:
+                    st.image(saved_url, use_container_width=True)
+            else:
+                st.write("")
+    st.write("---")

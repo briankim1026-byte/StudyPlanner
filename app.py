@@ -1,9 +1,59 @@
+import time
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import date, timedelta
+from supabase import create_client, Client
 
 # 1. 화면 기본 설정
 st.set_page_config(page_title="프리미엄 스터디 플래너", layout="wide")
+
+# 2. Supabase 연결
+@st.cache_resource
+def init_supabase() -> Client:
+    return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+
+supabase = init_supabase()
+
+# 3. DB에서 기존 데이터 불러오기 (새로고침/재접속 시 자동 복원)
+if "db_loaded" not in st.session_state:
+    # 사이드바 설정 불러오기
+    res_set = supabase.table("user_settings").select("*").eq("id", 1).execute()
+    if res_set.data:
+        row = res_set.data[0]
+        st.session_state["goal"] = row.get("goal", "")
+        st.session_state["target_grade"] = row.get("target_grade", "선택하세요")
+        st.session_state["math_count"] = int(row.get("math_count", 0))
+    else:
+        st.session_state["goal"] = ""
+        st.session_state["target_grade"] = "선택하세요"
+        st.session_state["math_count"] = 0
+
+    # 날짜별 기록 불러오기
+    res_logs = supabase.table("daily_logs").select("*").execute()
+    for row in res_logs.data:
+        dk = row["day_key"]
+        st.session_state[f"memo_{dk}"] = row.get("memo", "")
+        st.session_state[f"chk_{dk}"] = bool(row.get("is_done", False))
+        st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
+
+    st.session_state["db_loaded"] = True
+
+# 4. 자동 저장 함수
+def save_settings():
+    supabase.table("user_settings").upsert({
+        "id": 1,
+        "goal": st.session_state.get("goal", ""),
+        "target_grade": st.session_state.get("target_grade", "선택하세요"),
+        "math_count": int(st.session_state.get("math_count", 0))
+    }).execute()
+
+def save_day(day_key):
+    supabase.table("daily_logs").upsert({
+        "day_key": day_key,
+        "memo": st.session_state.get(f"memo_{day_key}", ""),
+        "is_done": bool(st.session_state.get(f"chk_{day_key}", False)),
+        "photo_url": st.session_state.get(f"photo_url_{day_key}", "")
+    }).execute()
 
 # CSS (한 줄로 안전하게 처리 및 첨부 박스 크기 최적화)
 st.markdown("""
@@ -14,21 +64,23 @@ st.markdown("""
     .stTextArea textarea { font-size: 0.95rem; line-height: 1.5; border-radius: 12px; border: 1.5px solid #dee2e6; box-shadow: 0 4px 6px rgba(0,0,0,0.04); background-color: #ffffff; transition: all 0.2s ease; }
     .stTextArea textarea:focus { border-color: #2575fc; box-shadow: 0 0 8px rgba(37, 117, 252, 0.3); }
     .stCheckbox { margin-top: -10px; margin-bottom: 10px; padding-left: 5px; }
-    /* 달력 안의 파일 업로드 박스가 너무 크지 않도록 조절 */
     [data-testid="stFileUploadDropzone"] { padding: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.header("🎯 나의 다짐")
-    goal = st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과")
-    target_grade = st.selectbox("목표 등급", ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"])
+    st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과", key="goal", on_change=save_settings)
+    grade_options = ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"]
+    if st.session_state.get("target_grade") not in grade_options:
+        st.session_state["target_grade"] = "선택하세요"
+    st.selectbox("목표 등급", grade_options, key="target_grade", on_change=save_settings)
     
     st.divider()
     
     st.header("📐 일일 수학 달성도")
     st.caption("매일 30문제 이상 꾸준히 푸는 것이 최상위권의 핵심입니다.")
-    math_count = st.number_input("오늘 푼 문제 수", min_value=0, max_value=200, value=0, step=1)
+    math_count = st.number_input("오늘 푼 문제 수", min_value=0, max_value=200, step=1, key="math_count", on_change=save_settings)
     
     st.progress(min(math_count / 30.0, 1.0))
     if math_count >= 30:
@@ -101,26 +153,53 @@ for week in weeks:
     for i, day in enumerate(week):
         with cols[i]:
             if day is not None:
+                day_key = day.strftime('%Y_%m_%d')
                 day_color = "red" if i == 6 else "#2575fc" if i == 5 else "#343a40"
                 st.markdown(f"<div style='color: {day_color}; font-weight: 800; font-size: 1.1rem; margin-bottom: 5px; padding-left: 5px;'>{day.month}/{day.day}</div>", unsafe_allow_html=True)
                 
                 # 1. 시간표 적는 칸
-                text_key = f"memo_{day.strftime('%Y_%m_%d')}"
-                st.text_area(label=f"{day.month}월 {day.day}일 시간표", label_visibility="collapsed", key=text_key, height=130, placeholder="국어 1강\n수학 15p")
+                text_key = f"memo_{day_key}"
+                if text_key not in st.session_state:
+                    st.session_state[text_key] = ""
+                st.text_area(
+                    label=f"{day.month}월 {day.day}일 시간표",
+                    label_visibility="collapsed",
+                    key=text_key,
+                    height=130,
+                    placeholder="국어 1강\n수학 15p",
+                    on_change=save_day,
+                    args=(day_key,)
+                )
                 
                 # 2. 하루 완료 체크박스
-                chk_key = f"chk_{day.strftime('%Y_%m_%d')}"
-                if st.checkbox("✅ 하루 완료", key=chk_key):
+                chk_key = f"chk_{day_key}"
+                if chk_key not in st.session_state:
+                    st.session_state[chk_key] = False
+                if st.checkbox("✅ 하루 완료", key=chk_key, on_change=save_day, args=(day_key,)):
                     st.success("달성!")
                 
                 # 3. 그날의 개별 사진 업로드 칸
-                photo_key = f"photo_{day.strftime('%Y_%m_%d')}"
+                photo_key = f"photo_{day_key}"
                 st.caption("📸 사진 인증")
-                uploaded_file = st.file_uploader(f"{day.month}월 {day.day}일 인증", type=["jpg", "jpeg", "png"], key=photo_key, label_visibility="collapsed")
+                uploaded_file = st.file_uploader(
+                    f"{day.month}월 {day.day}일 인증",
+                    type=["jpg", "jpeg", "png"],
+                    key=photo_key,
+                    label_visibility="collapsed"
+                )
                 
-                # 사진을 올리면 캘린더 칸 안에 표시됨
+                # 새 사진을 올리면 Supabase 스토리지에 업로드 후 URL 저장
                 if uploaded_file is not None:
-                    st.image(uploaded_file, use_container_width=True)
-            else:
-                st.write("")
-    st.write("---") # 주 단위로 얇은 선을 그어줘서 칸이 헷갈리지 않게 함
+                    file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+                    if st.session_state.get(f"last_uploaded_{day_key}") != file_id:
+                        ext = uploaded_file.name.split(".")[-1].lower()
+                        file_path = f"{day_key}_{int(time.time())}.{ext}"
+                        supabase.storage.from_("photos").upload(
+                            file_path,
+                            uploaded_file.getvalue(),
+                            {"content-type": uploaded_file.type}
+                        )
+                        public_url = supabase.storage.from_("photos").get_public_url(file_path)
+                        st.session_state[f"photo_url_{day_key}"] = public_url
+                        st.session_state[f"last_uploaded_{day_key}"] = file_id
+                        save_day(day_key

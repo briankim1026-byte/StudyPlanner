@@ -26,12 +26,8 @@ if "db_loaded" not in st.session_state:
     res_set = supabase.table("user_settings").select("*").eq("id", 1).execute()
     if res_set.data:
         row = res_set.data[0]
-        st.session_state["goal"] = row.get("goal", "")
-        st.session_state["target_grade"] = row.get("target_grade", "선택하세요")
         st.session_state["math_count"] = int(row.get("math_count", 0))
     else:
-        st.session_state["goal"] = ""
-        st.session_state["target_grade"] = "선택하세요"
         st.session_state["math_count"] = 0
 
     res_logs = supabase.table("daily_logs").select("*").execute()
@@ -52,8 +48,6 @@ if "selected_day" not in st.session_state:
 def save_settings():
     supabase.table("user_settings").upsert({
         "id": 1,
-        "goal": st.session_state.get("goal", ""),
-        "target_grade": st.session_state.get("target_grade", "선택하세요"),
         "math_count": int(st.session_state.get("math_count", 0))
     }).execute()
 
@@ -141,17 +135,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 6. 사이드바 (기존 기능 유지)
+# 6. 사이드바 (수학 달성도 + 집중 타이머)
 with st.sidebar:
-    st.header("🎯 나의 다짐")
-    st.text_input("최종 목표", placeholder="예: 연세대학교 경영학과", key="goal", on_change=save_settings)
-    grade_options = ["선택하세요", "1등급 (상위 4%)", "2등급 (상위 11%)", "3등급 (상위 23%)", "올백(만점)"]
-    if st.session_state.get("target_grade") not in grade_options:
-        st.session_state["target_grade"] = "선택하세요"
-    st.selectbox("목표 등급", grade_options, key="target_grade", on_change=save_settings)
-    
-    st.divider()
-    
     st.header("📐 일일 수학 달성도")
     st.caption("매일 30문제 이상 꾸준히 푸는 것이 최상위권의 핵심입니다.")
     math_count = st.number_input("오늘 푼 문제 수", min_value=0, max_value=200, step=1, key="math_count", on_change=save_settings)
@@ -200,7 +185,7 @@ with st.sidebar:
     """
     components.html(timer_html, height=200)
 
-# 7. 상단 타이틀 & 동기부여 대시보드
+# 7. 상단 타이틀 & 동기부여 대시보드 (2칸)
 st.markdown('<p class="main-title">✨ 기말고사 스터디 플래너</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-title">11/23 ~ 12/23 실전 집중 프로젝트</p>', unsafe_allow_html=True)
 
@@ -210,9 +195,8 @@ d_day_str = f"D-{d_day_diff}" if d_day_diff > 0 else ("D-DAY 🔥" if d_day_diff
 
 done_days = sum(1 for d in VALID_DATES if st.session_state.get(f"chk_{d.strftime('%Y_%m_%d')}", False))
 done_pct = int((done_days / TOTAL_DAYS) * 100)
-goal_display = st.session_state.get("goal", "").strip() or "목표를 입력해 보세요!"
 
-m1, m2, m3 = st.columns(3)
+m1, m2 = st.columns(2)
 with m1:
     st.markdown(f"""
         <div class="stat-card">
@@ -225,13 +209,6 @@ with m2:
         <div class="stat-card">
             <div class="stat-label">✅ 전체 달성률</div>
             <div class="stat-value" style="color:#10b981;">{done_days} / {TOTAL_DAYS}일 ({done_pct}%)</div>
-        </div>
-    """, unsafe_allow_html=True)
-with m3:
-    st.markdown(f"""
-        <div class="stat-card">
-            <div class="stat-label">🎯 나의 최종 목표</div>
-            <div class="stat-value" style="font-size:1.15rem; color:#334155;">{goal_display}</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -271,13 +248,13 @@ if chk_key not in st.session_state:
 
 is_sel_done = st.session_state[chk_key]
 box_class = "daily-box daily-box-done" if is_sel_done else "daily-box"
-status_badge = "🎉 오늘 목표 완료!" if is_sel_done else "📝 오늘의 계획을 채워보세요"
+status_badge = "🎉 오늘 목표 완료!" if is_sel_done else ""
 
 st.markdown(f"""
     <div class="{box_class}">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <span style="font-size:1.35rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 일일 시간표</span>
-            <span style="font-size:0.9rem; font-weight:700; color:{'#15803d' if is_sel_done else '#4f46e5'};">{status_badge}</span>
+            <span style="font-size:0.9rem; font-weight:700; color:#15803d;">{status_badge}</span>
         </div>
     </div>
 """, unsafe_allow_html=True)
@@ -289,7 +266,6 @@ with d_left:
         label="오늘 할 일 & 시간표",
         key=memo_key,
         height=230,
-        placeholder="예시)\n[09:00 ~ 11:00] 국어 문학 2강 + 기출 정리\n[13:00 ~ 15:00] 수학 수1 30문제 풀기\n[16:00 ~ 18:00] 영어 단어 50개 암기",
         on_change=save_day,
         args=(sel_key,)
     )
@@ -300,8 +276,6 @@ with d_right:
     saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
     if saved_url:
         st.image(saved_url, use_container_width=True)
-    else:
-        st.info("아직 등록된 인증 사진이 없어요. 아래에서 사진을 올려보세요!")
 
     with st.expander("📤 사진 올리기 / 변경하기", expanded=False):
         uploaded_file = st.file_uploader(
@@ -329,8 +303,7 @@ with d_right:
 st.divider()
 
 # 9. [아래쪽] 한눈에 보는 컴팩트 월별 달력
-st.markdown("### 🗓️ 한눈에 보는 전체 달력 (클릭해서 날짜 이동)")
-st.caption("완료한 날은 초록색으로 표시돼요. 날짜 아래 버튼을 누르면 위쪽 일일 시간표에서 바로 수정할 수 있어요.")
+st.markdown("### 🗓️ 한눈에 보는 전체 달력")
 
 all_dates = list(VALID_DATES)
 while len(all_dates) % 7 != 0:
@@ -352,7 +325,6 @@ for week in weeks:
                 is_done = st.session_state.get(f"chk_{dk}", False)
                 has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
 
-                # 카드 배경 및 테두리 스타일
                 if day == sel_day:
                     bg_color = "#eef2ff"
                     border_style = "2px solid #4f46e5"
@@ -368,7 +340,7 @@ for week in weeks:
 
                 day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
                 icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
-                preview = (memo_txt.replace("\n", " ")[:24] + "…") if len(memo_txt) > 24 else (memo_txt.replace("\n", " ") or "<span style='color:#cbd5e1;'>비어 있음</span>")
+                preview = (memo_txt.replace("\n", " ")[:24] + "…") if len(memo_txt) > 24 else memo_txt.replace("\n", " ")
 
                 st.markdown(f"""
                     <div class="cal-card" style="background:{bg_color}; border:{border_style};">

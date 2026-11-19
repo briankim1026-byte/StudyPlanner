@@ -381,4 +381,111 @@ if chk_key not in st.session_state:
 
 is_sel_done = st.session_state[chk_key]
 box_class = "daily-box daily-box-done" if is_sel_done else "daily-box"
-status
+status_badge = "🎉 오늘 목표 완료!" if is_sel_done else ""
+
+st.markdown(f"""
+    <div class="{box_class}">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:1.35rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 일일 시간표</span>
+            <span style="font-size:0.9rem; font-weight:700; color:#15803d;">{status_badge}</span>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
+
+d_left, d_right = st.columns([3, 2], gap="large")
+
+with d_left:
+    st.text_area(
+        label="오늘 할 일 & 시간표",
+        key=memo_key,
+        height=230,
+        on_change=save_day,
+        args=(sel_key,)
+    )
+    st.checkbox("✅ 오늘 하루 목표 완료!", key=chk_key, on_change=save_day, args=(sel_key,))
+
+with d_right:
+    st.markdown("**📸 오늘의 공부 인증 사진**")
+    saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
+    if saved_url:
+        st.image(saved_url, use_container_width=True)
+
+    with st.expander("📤 사진 올리기 / 변경하기", expanded=False):
+        uploaded_file = st.file_uploader(
+            "인증 사진 선택",
+            type=["jpg", "jpeg", "png"],
+            key=f"photo_{sel_key}",
+            label_visibility="collapsed"
+        )
+        if uploaded_file is not None:
+            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
+            if st.session_state.get(f"last_uploaded_{sel_key}") != file_id:
+                ext = uploaded_file.name.split(".")[-1].lower()
+                file_path = f"{sel_key}_{int(time.time())}.{ext}"
+                supabase.storage.from_("photos").upload(
+                    file_path,
+                    uploaded_file.getvalue(),
+                    {"content-type": uploaded_file.type}
+                )
+                public_url = supabase.storage.from_("photos").get_public_url(file_path)
+                st.session_state[f"photo_url_{sel_key}"] = public_url
+                st.session_state[f"last_uploaded_{sel_key}"] = file_id
+                save_day(sel_key)
+                st.rerun()
+
+st.divider()
+
+# 10. [아래쪽] 한눈에 보는 컴팩트 월별 달력
+st.markdown("### 🗓️ 한눈에 보는 전체 달력")
+
+all_dates = list(VALID_DATES)
+while len(all_dates) % 7 != 0:
+    all_dates.append(None)
+weeks = [all_dates[i:i+7] for i in range(0, len(all_dates), 7)]
+
+header_cols = st.columns(7)
+for i, day_name in enumerate(["월", "화", "수", "목", "금", "토", "일"]):
+    color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#475569"
+    header_cols[i].markdown(f"<div style='text-align:center; font-weight:800; color:{color}; padding-bottom:6px;'>{day_name}</div>", unsafe_allow_html=True)
+
+for week in weeks:
+    cols = st.columns(7)
+    for i, day in enumerate(week):
+        with cols[i]:
+            if day is not None:
+                dk = day.strftime('%Y_%m_%d')
+                memo_txt = st.session_state.get(f"memo_{dk}", "").strip()
+                is_done = st.session_state.get(f"chk_{dk}", False)
+                has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
+
+                if day == sel_day:
+                    bg_color = "#eef2ff"
+                    border_style = "2px solid #4f46e5"
+                elif is_done:
+                    bg_color = "#ecfdf5"
+                    border_style = "1.5px solid #6ee7b7"
+                elif day == today:
+                    bg_color = "#fffbeb"
+                    border_style = "2px solid #f59e0b"
+                else:
+                    bg_color = "#ffffff"
+                    border_style = "1px solid #e2e8f0"
+
+                day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
+                icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
+                preview = (memo_txt.replace("\n", " ")[:24] + "…") if len(memo_txt) > 24 else memo_txt.replace("\n", " ")
+
+                st.markdown(f"""
+                    <div class="cal-card" style="background:{bg_color}; border:{border_style};">
+                        <div class="cal-date" style="color:{day_color};">
+                            <span>{day.month}/{day.day}{' 🔥' if day == today else ''}</span>
+                            <span style="font-size:0.85rem;">{icons}</span>
+                        </div>
+                        <div class="cal-preview">{preview}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                btn_label = "선택됨" if day == sel_day else "열기"
+                st.button(btn_label, key=f"btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
+            else:
+                st.write("")

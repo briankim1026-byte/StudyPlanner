@@ -1,4 +1,5 @@
 import html
+import json
 import re
 import time
 import streamlit as st
@@ -19,6 +20,7 @@ END_DATE = date(2026, 12, 23)
 TOTAL_DAYS = (END_DATE - START_DATE).days + 1
 VALID_DATES = [START_DATE + timedelta(days=i) for i in range(TOTAL_DAYS)]
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+STUDY_SUBJS = ["국어", "수학", "영어", "탐구"]
 
 all_dates_padded = list(VALID_DATES)
 while len(all_dates_padded) % 7 != 0:
@@ -48,6 +50,17 @@ def save_day(day_key):
         "is_done": bool(st.session_state.get(f"chk_{day_key}", False)),
         "photo_url": st.session_state.get(f"photo_url_{day_key}", "")
     }).execute()
+
+def save_study_time(sel_key):
+    data = {}
+    for s in STUDY_SUBJS:
+        data[s] = [
+            int(st.session_state.get(f"st_{sel_key}_{s}_h", 0)),
+            int(st.session_state.get(f"st_{sel_key}_{s}_m", 0)),
+        ]
+    st_key = f"study_time_{sel_key}"
+    st.session_state[f"memo_{st_key}"] = json.dumps(data, ensure_ascii=False)
+    save_day(st_key)
 
 def select_day(target_date):
     st.session_state["selected_day"] = target_date
@@ -281,6 +294,10 @@ footer { visibility: hidden; }
 .sch-plain { background: #f8fafc; color: #334155; border-left: 3px solid #cbd5e1; }
 .detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; }
 .detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
+.st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.st-card-title { font-size: 1.05rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
+.st-card-total { font-size: .92rem; font-weight: 700; color: #475569; }
+.st-subj-lbl { font-size: .85rem; font-weight: 700; color: #334155; margin-bottom: 4px; }
 .cal-card { border-radius: 14px; padding: 9px 10px; min-height: 76px; margin-bottom: 6px; box-shadow: 0 3px 10px rgba(15,23,42,.03); transition: transform .15s ease; }
 .cal-card:hover { transform: translateY(-1px); }
 .cal-date { font-weight: 800; font-size: .86rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
@@ -298,7 +315,7 @@ footer { visibility: hidden; }
 
 today = date.today()
 
-# 사이드바: 과목별 시험 시간표 + 백색소음 + 집중 타이머
+# 사이드바
 with st.sidebar:
     st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">📅 과목별 시험 시간표</div>', unsafe_allow_html=True)
     exam_items = parse_exam_schedule(st.session_state.get("memo_exam_schedule", ""), today)
@@ -497,17 +514,51 @@ is_sel_done = st.session_state[chk_key]
 
 st.markdown(f"""
     <div class="detail-banner {'detail-banner-done' if is_sel_done else ''}">
-        <span style="font-size:1.05rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 하루 분량 & 인증</span>
+        <span style="font-size:1.05rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 하루 분량 & STUDY TIME</span>
         <span style="font-size:.85rem; font-weight:800; color:#15803d;">{'🎉 오늘 목표 완료!' if is_sel_done else ''}</span>
     </div>
 """, unsafe_allow_html=True)
 
 d_left, d_right = st.columns([3, 2], gap="large")
 with d_left:
-    st.text_area("하루 분량", key=memo_key, height=195, label_visibility="collapsed", on_change=save_day, args=(sel_key,))
+    st.text_area("하루 분량", key=memo_key, height=260, label_visibility="collapsed", on_change=save_day, args=(sel_key,))
     st.checkbox("✅ 오늘 하루 목표 완료!", key=chk_key, on_change=save_day, args=(sel_key,))
 
 with d_right:
+    # STUDY TIME 초기화 및 합계 계산
+    raw_st = st.session_state.get(f"memo_study_time_{sel_key}", "")
+    try:
+        saved_st = json.loads(raw_st) if raw_st else {}
+    except Exception:
+        saved_st = {}
+    total_mins = 0
+    for s in STUDY_SUBJS:
+        h_k, m_k = f"st_{sel_key}_{s}_h", f"st_{sel_key}_{s}_m"
+        if h_k not in st.session_state:
+            st.session_state[h_k] = int(saved_st.get(s, [0, 0])[0])
+        if m_k not in st.session_state:
+            st.session_state[m_k] = int(saved_st.get(s, [0, 0])[1])
+        total_mins += int(st.session_state[h_k]) * 60 + int(st.session_state[m_k])
+    tot_h, tot_m = total_mins // 60, total_mins % 60
+
+    with st.container(border=True):
+        st.markdown(f"""
+            <div class="st-card-hdr">
+                <span class="st-card-title">STUDY TIME</span>
+                <span class="st-card-total">TOTAL : <b style="color:#4f46e5;">{tot_h}</b> h <b style="color:#4f46e5;">{tot_m:02d}</b> m</span>
+            </div>
+        """, unsafe_allow_html=True)
+        for row_subjs in [STUDY_SUBJS[:2], STUDY_SUBJS[2:]]:
+            r_cols = st.columns(2, gap="medium")
+            for idx, subj in enumerate(row_subjs):
+                with r_cols[idx]:
+                    st.markdown(f'<div class="st-subj-lbl">{subj}</div>', unsafe_allow_html=True)
+                    hc, mc = st.columns(2, gap="small")
+                    with hc:
+                        st.number_input("h", min_value=0, max_value=24, step=1, key=f"st_{sel_key}_{subj}_h", on_change=save_study_time, args=(sel_key,))
+                    with mc:
+                        st.number_input("m", min_value=0, max_value=59, step=5, key=f"st_{sel_key}_{subj}_m", on_change=save_study_time, args=(sel_key,))
+
     saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
     if saved_url:
         st.image(saved_url, use_container_width=True)

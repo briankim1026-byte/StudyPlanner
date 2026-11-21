@@ -26,8 +26,6 @@ while len(all_dates_padded) % 7 != 0:
 WEEKS = [all_dates_padded[i:i+7] for i in range(0, len(all_dates_padded), 7)]
 
 if "db_loaded" not in st.session_state:
-    res_set = supabase.table("user_settings").select("*").eq("id", 1).execute()
-    st.session_state["math_count"] = int(res_set.data[0].get("math_count", 0)) if res_set.data else 0
     res_logs = supabase.table("daily_logs").select("*").execute()
     for row in res_logs.data:
         dk = row["day_key"]
@@ -36,14 +34,12 @@ if "db_loaded" not in st.session_state:
         st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
     if not st.session_state.get("memo_fixed_range"):
         st.session_state["memo_fixed_range"] = "07:00-24:00"
+    st.session_state.setdefault("memo_exam_schedule", "")
     st.session_state["db_loaded"] = True
 
 if "selected_day" not in st.session_state:
     today = date.today()
     st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
-
-def save_settings():
-    supabase.table("user_settings").upsert({"id": 1, "math_count": int(st.session_state.get("math_count", 0))}).execute()
 
 def save_day(day_key):
     supabase.table("daily_logs").upsert({
@@ -99,14 +95,32 @@ def split_into_chunks(total: int, parts: int):
     base, rem = total // parts, total % parts
     return [base + (1 if i < rem else 0) for i in range(parts)]
 
+def parse_exam_schedule(text: str, today_dt: date):
+    items = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"(\d{1,2})\s*(?:/|-|\.|월)\s*(\d{1,2})\s*일?\s*(.+)", line)
+        if m:
+            mo, dy, subj = int(m.group(1)), int(m.group(2)), m.group(3).strip(" :-")
+            try:
+                dt = date(2026, mo, dy)
+                diff = (dt - today_dt).days
+                dday = f"D-{diff}" if diff > 0 else ("D-DAY" if diff == 0 else f"D+{abs(diff)}")
+                items.append((dt, f"{mo}/{dy} ({WEEKDAY_KR[dt.weekday()]})", subj, dday, diff))
+            except ValueError:
+                items.append((date(2099, 1, 1), "", line, "", 999))
+        else:
+            items.append((date(2099, 1, 1), "", line, "", 999))
+    return sorted(items, key=lambda x: x[0])
+
 def parse_weekly_tasks(text: str):
     tasks = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
-
-        # 1) 소요 시간 추출 ("1시간 반씩", "1시간 30분", "60분씩", "2시간")
         dur = None
         m_hb = re.search(r"(\d+)\s*시간\s*반(?:씩)?", line)
         m_hm = re.search(r"(\d+)\s*시간\s*(\d+)\s*분(?:씩)?", line)
@@ -121,7 +135,6 @@ def parse_weekly_tasks(text: str):
         elif m_m:
             dur, line = int(m_m.group(1)), (line[:m_m.start()] + line[m_m.end():]).strip()
 
-        # 2) 복합 반복 ("총 3지문 각각 5번씩")
         m_multi = re.search(r"(?:총\s*)?(\d+)\s*(지문|단원|과|강|챕터).*?각각\s*(\d+)\s*(?:번|회)씩?", line)
         if m_multi:
             n_items, unit, reps = int(m_multi.group(1)), m_multi.group(2), int(m_multi.group(3))
@@ -130,26 +143,20 @@ def parse_weekly_tasks(text: str):
             tasks.append({"mode": "sessions", "sessions": sessions, "dur": dur or 30})
             continue
 
-        # 3) 빈도/일수 추출 ("매일", "이틀에 한번", "일주일에 4번", "주 3회", "5일")
         freq = None
         if re.search(r"매일|하루에\s*한\s*번", line):
-            freq = 7
-            line = re.sub(r"매일|하루에\s*한\s*번", "", line).strip()
+            freq, line = 7, re.sub(r"매일|하루에\s*한\s*번", "", line).strip()
         elif re.search(r"이틀에\s*한\s*번|격일", line):
-            freq = 4
-            line = re.sub(r"이틀에\s*한\s*번|격일", "", line).strip()
+            freq, line = 4, re.sub(r"이틀에\s*한\s*번|격일", "", line).strip()
         else:
             m_freq = re.search(r"(?:일주일에\s*|주에\s*|주\s*)?(\d+)\s*(일|번|회)(?:씩)?", line)
             if m_freq:
-                freq = int(m_freq.group(1))
-                line = (line[:m_freq.start()] + line[m_freq.end():]).strip()
+                freq, line = int(m_freq.group(1)), (line[:m_freq.start()] + line[m_freq.end():]).strip()
 
-        # 4) 분량/단원 추출 ("15단원", "200문제", "70p", "3강")
         qty, unit = None, ""
         m_qty = re.search(r"(?:총\s*)?(\d+)\s*(단원|과|강|지문|챕터|회차|문제|페이지|쪽|개|장|p|P)", line)
         if m_qty:
-            qty, unit = int(m_qty.group(1)), m_qty.group(2)
-            line = (line[:m_qty.start()] + line[m_qty.end():]).strip()
+            qty, unit, line = int(m_qty.group(1)), m_qty.group(2), (line[:m_qty.start()] + line[m_qty.end():]).strip()
 
         title = re.sub(r"\s+", " ", line).strip(" ,/-:") or raw.strip()
         tasks.append({"mode": "smart", "title": title, "qty": qty, "unit": unit, "freq": freq, "dur": dur or 45})
@@ -171,7 +178,6 @@ def generate_weekly_schedule(week_dates, range_str: str, weekly_tasks_text: str,
     tasks = parse_weekly_tasks(weekly_tasks_text)
     if not n_days or not tasks:
         return [], []
-
     day_slots, day_scheduled, unscheduled = {}, {}, []
     for d in active_days:
         f_ev = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{d.weekday()}", ""))
@@ -179,7 +185,6 @@ def generate_weekly_schedule(week_dates, range_str: str, weekly_tasks_text: str,
         day_scheduled[d] = [(s, e, f"📌 {t}") for s, e, t in f_ev]
 
     SEQ_UNITS = {"단원", "과", "강", "지문", "챕터", "회차"}
-
     for task in tasks:
         dur = task["dur"]
         if task["mode"] == "sessions":
@@ -188,46 +193,25 @@ def generate_weekly_schedule(week_dates, range_str: str, weekly_tasks_text: str,
                 if not place_in_day(day_slots, day_scheduled, best_d, label, dur, break_min):
                     unscheduled.append(label)
             continue
-
         title, qty, unit, freq = task["title"], task["qty"], task["unit"], task["freq"]
-
-        # 몇 일에 나눠서 배치할지 결정
-        if freq:
-            k = min(freq, n_days)
-        elif qty and unit in SEQ_UNITS:
-            k = min(qty, n_days)
-        elif qty:
-            k = n_days
-        else:
-            k = min(2, n_days)
-
-        # 빈 시간이 가장 넉넉한 k개 요일 선택 후 날짜순 정렬
-        ranked = sorted(active_days, key=lambda d: (-free_minutes_of(day_slots[d]), d))
-        chosen = sorted(ranked[:k])
-
+        k = min(freq, n_days) if freq else (min(qty, n_days) if (qty and unit in SEQ_UNITS) else (n_days if qty else min(2, n_days)))
+        chosen = sorted(sorted(active_days, key=lambda d: (-free_minutes_of(day_slots[d]), d))[:k])
         sessions = []
         if qty and unit in SEQ_UNITS:
             if qty >= k:
-                chunks = split_into_chunks(qty, k)
                 cur = 1
-                for c in chunks:
+                for c in split_into_chunks(qty, k):
                     end = cur + c - 1
-                    rng = f"{cur}{unit}" if cur == end else f"{cur}~{end}{unit}"
-                    sessions.append(f"{title} {rng}")
+                    sessions.append(f"{title} {cur}{unit}" if cur == end else f"{title} {cur}~{end}{unit}")
                     cur = end + 1
             else:
-                for i in range(k):
-                    sessions.append(f"{title} {(i % qty) + 1}{unit}")
+                sessions = [f"{title} {(i % qty) + 1}{unit}" for i in range(k)]
         elif qty:
-            chunks = split_into_chunks(qty, k)
-            for c in chunks:
-                if c > 0:
-                    sessions.append(f"{title} {c}{unit}")
+            sessions = [f"{title} {c}{unit}" for c in split_into_chunks(qty, k) if c > 0]
         else:
             cnt = freq if freq else k
             sessions = [f"{title} ({i+1}/{cnt}회)" for i in range(cnt)]
 
-        # 배치 실행
         if len(sessions) <= len(chosen):
             for d, label in zip(chosen, sessions):
                 if not place_in_day(day_slots, day_scheduled, d, label, dur, break_min):
@@ -270,11 +254,12 @@ footer { visibility: hidden; }
                       radial-gradient(at 50% 95%, rgba(167,243,208,.12) 0px, transparent 45%);
     background-attachment: fixed;
 }
-[data-testid="stSidebar"] { background: rgba(255,255,255,.84); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
-.side-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 16px; box-shadow: 0 6px 18px rgba(15,23,42,.04); margin-bottom: 12px; }
-.side-title { font-size: .95rem; font-weight: 800; color: #1e293b; margin-bottom: 6px; display: flex; justify-content: space-between; }
+[data-testid="stSidebar"] { background: rgba(255,255,255,.85); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
+.side-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px; box-shadow: 0 6px 18px rgba(15,23,42,.04); margin-bottom: 10px; }
+.exam-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; border-radius: 10px; background: #f8fafc; margin-bottom: 6px; font-size: .8rem; }
+.exam-dday { font-size: .7rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #4f46e5; white-space: nowrap; }
 .mini-bar-bg { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 10px; }
-.mini-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #6366f1, #0ea5e9); transition: width .4s ease; }
+.mini-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10b981, #34d399); transition: width .4s ease; }
 .hero-wrap { text-align: center; margin-bottom: 20px; }
 .hero-pill { display: inline-block; padding: 5px 14px; border-radius: 999px; background: rgba(99,102,241,.1); color: #4f46e5; font-size: .78rem; font-weight: 700; letter-spacing: .04em; margin-bottom: 8px; }
 .hero-title { font-size: 2.3rem; font-weight: 900; letter-spacing: -.03em; background: linear-gradient(120deg, #1e1b4b 0%, #4f46e5 55%, #0284c7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; }
@@ -311,25 +296,69 @@ footer { visibility: hidden; }
 </style>
 """, unsafe_allow_html=True)
 
+today = date.today()
+
+# 사이드바: 과목별 시험 시간표 + 백색소음 + 집중 타이머
 with st.sidebar:
-    math_count = st.session_state.get("math_count", 0)
-    math_pct = min(int((math_count / 30.0) * 100), 100)
-    st.markdown(f"""
-        <div class="side-card">
-            <div class="side-title"><span>📐 일일 수학 달성도</span><span style="color:#4f46e5;">{math_pct}%</span></div>
-            <div style="font-size:.78rem; color:#64748b;">목표 30문제 · 현재 <b>{math_count}</b>문제</div>
-            <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:{math_pct}%;"></div></div>
+    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">📅 과목별 시험 시간표</div>', unsafe_allow_html=True)
+    exam_items = parse_exam_schedule(st.session_state.get("memo_exam_schedule", ""), today)
+    if exam_items:
+        rows_html = ""
+        for _, dt_lbl, subj, dday, _ in exam_items:
+            badge = f'<span class="exam-dday">{dday}</span>' if dday else ""
+            rows_html += f'<div class="exam-row"><div><div style="font-weight:800; color:#1e293b;">{html.escape(subj)}</div><div style="font-size:.7rem; color:#64748b;">{dt_lbl}</div></div>{badge}</div>'
+        st.markdown(f'<div class="side-card" style="padding:10px 10px 4px 10px;">{rows_html}</div>', unsafe_allow_html=True)
+    with st.expander("✏️ 시험 일정 입력 / 수정", expanded=(not bool(exam_items))):
+        st.caption("한 줄씩 입력 (예: 12/18 국어, 영어)")
+        st.text_area("시험 일정", key="memo_exam_schedule", height=100, label_visibility="collapsed", on_change=save_day, args=("exam_schedule",))
+
+    st.write("")
+    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">🎧 공부용 백색소음</div>', unsafe_allow_html=True)
+    noise_html = """
+    <div style='padding:14px 12px; border-radius:18px; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.06); border:1px solid #e2e8f0; font-family:Pretendard,sans-serif; text-align:center;'>
+        <div id='ns' style='font-size:.72rem; font-weight:800; color:#64748b; margin-bottom:8px;'>OFF</div>
+        <div style='display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; margin-bottom:10px;'>
+            <button onclick='playNoise("pink","🌧️ 빗소리 재생 중")' style='padding:7px 2px; cursor:pointer; background:#eef2ff; color:#4f46e5; border:none; border-radius:9px; font-weight:700; font-size:.73rem;'>🌧️ 빗소리</button>
+            <button onclick='playNoise("brown","☕ 카페·바람 재생 중")' style='padding:7px 2px; cursor:pointer; background:#ecfdf5; color:#059669; border:none; border-radius:9px; font-weight:700; font-size:.73rem;'>☕ 바람</button>
+            <button onclick='playNoise("white","📻 백색소음 재생 중")' style='padding:7px 2px; cursor:pointer; background:#f1f5f9; color:#334155; border:none; border-radius:9px; font-weight:700; font-size:.73rem;'>📻 백색</button>
         </div>
-    """, unsafe_allow_html=True)
-    math_count = st.number_input("오늘 푼 문제 수", min_value=0, max_value=200, step=1, key="math_count", on_change=save_settings)
-    if math_count >= 30:
-        st.success("🔥 오늘 수학 목표 달성!")
+        <div style='display:flex; align-items:center; gap:8px;'>
+            <span style='font-size:.75rem;'>🔊</span>
+            <input type='range' id='vol' min='0' max='0.35' step='0.01' value='0.12' oninput='setVol(this.value)' style='flex:1; accent-color:#4f46e5;'>
+            <button onclick='stopNoise()' style='padding:5px 10px; cursor:pointer; background:#fee2e2; color:#dc2626; border:none; border-radius:8px; font-weight:700; font-size:.72rem;'>정지</button>
+        </div>
+        <script>
+            let ctx=null, src=null, gain=null;
+            function stopNoise(){ if(src){try{src.stop();}catch(e){} src=null;} document.getElementById('ns').textContent='OFF'; }
+            function setVol(v){ if(gain) gain.gain.value=parseFloat(v); }
+            function playNoise(type, label){
+                stopNoise();
+                ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+                if(ctx.state==='suspended') ctx.resume();
+                let len = ctx.sampleRate * 3, buf = ctx.createBuffer(1, len, ctx.sampleRate), out = buf.getChannelData(0);
+                let b0=0,b1=0,b2=0,last=0;
+                for(let i=0;i<len;i++){
+                    let w = Math.random()*2-1;
+                    if(type==='white'){ out[i]=w*0.5; }
+                    else if(type==='pink'){ b0=0.997*b0+w*0.029; b1=0.985*b1+w*0.032; b2=0.950*b2+w*0.048; out[i]=(b0+b1+b2+w*0.05)*1.5; }
+                    else { out[i]=(last+(0.02*w))/1.02; last=out[i]; out[i]*=3.2; }
+                }
+                src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+                gain = ctx.createGain(); gain.gain.value = parseFloat(document.getElementById('vol').value);
+                src.connect(gain); gain.connect(ctx.destination); src.start();
+                document.getElementById('ns').textContent = label;
+            }
+        </script>
+    </div>
+    """
+    components.html(noise_html, height=125)
+
     st.write("")
     st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">⏱️ 집중 타이머</div>', unsafe_allow_html=True)
     timer_html = """
     <div style='text-align:center; padding:16px 12px; border-radius:18px; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.06); border:1px solid #e2e8f0; font-family:Pretendard,sans-serif;'>
         <div id='st' style='font-size:.72rem; font-weight:800; color:#64748b; letter-spacing:.06em;'>READY</div>
-        <div id='tm' style='color:#1e293b; font-size:2.5rem; font-weight:900; font-variant-numeric:tabular-nums; margin:4px 0 10px 0;'>00:00</div>
+        <div id='tm' style='color:#1e293b; font-size:2.4rem; font-weight:900; font-variant-numeric:tabular-nums; margin:4px 0 10px 0;'>00:00</div>
         <div style='margin-bottom:12px;'>
             <input type='number' id='cm' value='50' min='1' style='width:58px; padding:5px; border-radius:9px; border:1.5px solid #e2e8f0; text-align:center; font-weight:800;'> <span style='font-size:.82rem; font-weight:700; color:#64748b;'>분</span>
         </div>
@@ -351,7 +380,7 @@ with st.sidebar:
         </script>
     </div>
     """
-    components.html(timer_html, height=245)
+    components.html(timer_html, height=235)
 
 st.markdown("""
     <div class="hero-wrap">
@@ -360,7 +389,6 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-today = date.today()
 d_day_diff = (END_DATE - today).days
 d_day_str = f"D-{d_day_diff}" if d_day_diff > 0 else ("D-DAY 🔥" if d_day_diff == 0 else f"D+{abs(d_day_diff)}")
 done_days = sum(1 for d in VALID_DATES if st.session_state.get(f"chk_{d.strftime('%Y_%m_%d')}", False))
@@ -379,7 +407,7 @@ with m2:
         <div class="stat-card">
             <div class="stat-top"><span class="stat-label">✅ 전체 달성률</span><span class="stat-badge" style="background:#ecfdf5; color:#059669;">{done_pct}% 완료</span></div>
             <div class="stat-value" style="color:#0f172a;">{done_days} <span style="font-size:1rem; color:#94a3b8; font-weight:700;">/ {TOTAL_DAYS}일</span></div>
-            <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:{done_pct}%; background:linear-gradient(90deg,#10b981,#34d399);"></div></div>
+            <div class="mini-bar-bg"><div class="mini-bar-fill" style="width:{done_pct}%;"></div></div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -407,7 +435,7 @@ with t1:
                 for wd_i in range(5):
                     st.session_state[f"memo_fixed_{wd_i}"] = bulk_txt
                     save_day(f"fixed_{wd_i}")
-                st.success("월~금 고정 시간표가 모두 저장됐어요! (특정 요일 학원은 요일을 따로 골라 추가하세요)")
+                st.success("월~금 고정 시간표가 모두 저장됐어요!")
         else:
             fk = f"fixed_{WEEKDAY_KR.index(target_opt)}"
             st.session_state.setdefault(f"memo_{fk}", "")

@@ -20,9 +20,8 @@ END_DATE = date(2026, 12, 23)
 TOTAL_DAYS = (END_DATE - START_DATE).days + 1
 VALID_DATES = [START_DATE + timedelta(days=i) for i in range(TOTAL_DAYS)]
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
-STUDY_SUBJS = ["국어", "수학", "영어", "탐구"]
+DINNER_LABEL = "🍽️ 저녁 식사"
 
-# 할 일별 고유 색상 팔레트 (배경, 테두리, 글자, 아이콘)
 TASK_COLORS = [
     ("#eef2ff", "#6366f1", "#312e81", "🟣"),
     ("#ecfdf5", "#10b981", "#065f46", "🟢"),
@@ -48,8 +47,8 @@ if "db_loaded" not in st.session_state:
         st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
     if not st.session_state.get("memo_fixed_range"):
         st.session_state["memo_fixed_range"] = "07:00-24:00"
-    if not st.session_state.get("memo_dinner_time"):
-        st.session_state["memo_dinner_time"] = "18:00-19:00"
+    if not st.session_state.get("memo_study_subjects"):
+        st.session_state["memo_study_subjects"] = "국어, 수학, 영어, 탐구"
     st.session_state.setdefault("memo_exam_schedule", "")
     st.session_state["db_loaded"] = True
 
@@ -65,8 +64,14 @@ def save_day(day_key):
         "photo_url": st.session_state.get(f"photo_url_{day_key}", "")
     }).execute()
 
+def get_study_subjects():
+    raw = st.session_state.get("memo_study_subjects", "국어, 수학, 영어, 탐구")
+    subjs = [s.strip() for s in raw.split(",") if s.strip()]
+    return subjs if subjs else ["국어", "수학", "영어", "탐구"]
+
 def save_study_time(sel_key):
-    data = {s: [int(st.session_state.get(f"st_{sel_key}_{s}_h", 0)), int(st.session_state.get(f"st_{sel_key}_{s}_m", 0))] for s in STUDY_SUBJS}
+    subjs = get_study_subjects()
+    data = {s: [int(st.session_state.get(f"st_{sel_key}_{s}_h", 0)), int(st.session_state.get(f"st_{sel_key}_{s}_m", 0))] for s in subjs}
     st_key = f"study_time_{sel_key}"
     st.session_state[f"memo_{st_key}"] = json.dumps(data, ensure_ascii=False)
     save_day(st_key)
@@ -95,15 +100,6 @@ def parse_fixed_schedule(text: str):
             s, e, t = parse_time_groups(m.group(1), m.group(2), m.group(3)), parse_time_groups(m.group(4), m.group(5), m.group(6)), m.group(7).strip()
             if e > s and t:
                 events.append((s, e, t))
-    return sorted(events, key=lambda x: x[0])
-
-def get_day_fixed_events(wd_idx: int):
-    events = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_idx}", ""))
-    dinner_str = st.session_state.get("memo_dinner_time", "").strip()
-    if dinner_str:
-        ds, de = parse_range(dinner_str, default=(0, 0))
-        if de > ds:
-            events.append((ds, de, "🍽️ 저녁 식사"))
     return sorted(events, key=lambda x: x[0])
 
 def calc_free_minutes(wake_min: int, sleep_min: int, fixed_events) -> int:
@@ -188,7 +184,6 @@ def parse_weekly_tasks(text: str):
         tasks.append({"mode": "smart", "title": title, "qty": qty, "unit": unit, "freq": freq})
     return tasks
 
-# 주간 할 일 → 요일별 '할 일 목록'만 자동 배분 (시간 배치는 사용자가 직접!)
 def distribute_weekly_tasks_only(week_dates, range_str: str, weekly_tasks_text: str):
     wake_min, sleep_min = parse_range(range_str)
     active_days = [d for d in week_dates if d is not None]
@@ -197,7 +192,7 @@ def distribute_weekly_tasks_only(week_dates, range_str: str, weekly_tasks_text: 
     if not n_days or not tasks:
         return
 
-    day_free = {d: calc_free_minutes(wake_min, sleep_min, get_day_fixed_events(d.weekday())) for d in active_days}
+    day_free = {d: calc_free_minutes(wake_min, sleep_min, parse_fixed_schedule(st.session_state.get(f"memo_fixed_{d.weekday()}", ""))) for d in active_days}
     day_tasks = {d: [] for d in active_days}
     SEQ_UNITS = {"단원", "과", "강", "지문", "챕터", "회차"}
 
@@ -462,12 +457,8 @@ active_week = WEEKS[picked_week_idx]
 
 t1, t2 = st.columns(2, gap="medium")
 with t1:
-    with st.expander("⚙️ 고정 시간표 & 저녁 시간 설정", expanded=False):
-        r1, r2 = st.columns(2)
-        with r1:
-            st.text_input("기상~취침 (예: 7시-24시)", key="memo_fixed_range", on_change=save_day, args=("fixed_range",))
-        with r2:
-            st.text_input("🍽️ 매일 저녁 시간 (예: 18시-19시)", key="memo_dinner_time", on_change=save_day, args=("dinner_time",))
+    with st.expander("⚙️ 고정 시간표 설정 (학교 · 학원)", expanded=False):
+        st.text_input("기상~취침 시간 (예: 7시-24시)", key="memo_fixed_range", on_change=save_day, args=("fixed_range",))
         target_opt = st.selectbox("설정할 요일", ["평일 전체 (월~금)"] + WEEKDAY_KR)
         if target_opt == "평일 전체 (월~금)":
             st.caption("평일 공통 고정 일정 (예: 8시-16시 학교)")
@@ -493,7 +484,6 @@ with t2:
             distribute_weekly_tasks_only(active_week, st.session_state.get("memo_fixed_range", "07:00-24:00"), st.session_state.get(f"memo_{wk_task_key}", ""))
             st.rerun()
 
-# [위쪽] 주간 할 일 보드
 st.markdown(f'<div class="sec-header"><span class="sec-dot"></span>{week_labels[picked_week_idx]} 요일별 할 일</div>', unsafe_allow_html=True)
 w_cols = st.columns(7)
 for i, day in enumerate(active_week):
@@ -523,7 +513,6 @@ for i, day in enumerate(active_week):
         else:
             st.write("")
 
-# [중간] 선택한 날 1시간 세로 시간표 (직접 터치 배치) + 오른쪽 STUDY TIME & 사진 인증
 sel_key = sel_day.strftime('%Y_%m_%d')
 sel_wd = WEEKDAY_KR[sel_day.weekday()]
 memo_key, chk_key = f"memo_{sel_key}", f"chk_{sel_key}"
@@ -544,28 +533,25 @@ with d_left:
     day_tasks = get_day_task_list(sel_key)
     color_map = {t: TASK_COLORS[idx % len(TASK_COLORS)] for idx, t in enumerate(day_tasks)}
 
-    # 1) 칠할 할 일(색깔) 선택 바
-    if day_tasks:
-        brush_options = day_tasks + ["__ERASE__"]
-        def fmt_brush(opt):
-            if opt == "__ERASE__":
-                return "🧹 지우기"
-            return f"{color_map[opt][3]} {opt}"
-        selected_brush = st.radio(
-            "칠할 할 일을 고른 뒤 아래 1시간 칸을 터치하세요",
-            brush_options,
-            format_func=fmt_brush,
-            horizontal=True,
-            key=f"brush_{sel_key}"
-        )
-    else:
-        selected_brush = "__ERASE__"
-        st.info("오늘 배정된 할 일이 없어요. 위에서 주간 할 일을 자동 배분하거나 아래에서 직접 추가해 보세요.")
+    brush_options = day_tasks + [DINNER_LABEL, "__ERASE__"]
+    def fmt_brush(opt):
+        if opt == "__ERASE__":
+            return "🧹 지우기"
+        if opt == DINNER_LABEL:
+            return DINNER_LABEL
+        return f"{color_map[opt][3]} {opt}"
 
-    # 2) 세로 1시간 단위 타임테이블
+    selected_brush = st.radio(
+        "칠할 항목을 고른 뒤 아래 1시간 칸을 터치하세요",
+        brush_options,
+        format_func=fmt_brush,
+        horizontal=True,
+        key=f"brush_{sel_key}"
+    )
+
     wake_min, sleep_min = parse_range(st.session_state.get("memo_fixed_range", "07:00-24:00"))
     start_h, end_h = max(0, wake_min // 60), min(24, (sleep_min + 59) // 60)
-    fixed_events = get_day_fixed_events(sel_day.weekday())
+    fixed_events = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{sel_day.weekday()}", ""))
     day_grid = load_day_grid(sel_key)
 
     for h in range(start_h, end_h):
@@ -578,8 +564,9 @@ with d_left:
             st.markdown(f'<div class="hour-lbl">{h:02d}:00</div>', unsafe_allow_html=True)
         with c_box:
             if fixed_hit:
-                cls = "slot-dinner" if "저녁" in fixed_hit else "slot-fixed"
-                st.markdown(f'<div class="slot-box {cls}">{html.escape(fixed_hit)}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="slot-box slot-fixed">{html.escape(fixed_hit)}</div>', unsafe_allow_html=True)
+            elif assigned == DINNER_LABEL:
+                st.markdown(f'<div class="slot-box slot-dinner">{DINNER_LABEL}</div>', unsafe_allow_html=True)
             elif assigned:
                 bg, bd, fg, dot = color_map.get(assigned, ("#f8fafc", "#64748b", "#1e293b", "📌"))
                 st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{dot} {html.escape(assigned)}</div>', unsafe_allow_html=True)
@@ -598,13 +585,14 @@ with d_left:
     st.checkbox("✅ 오늘 하루 목표 완료!", key=chk_key, on_change=save_day, args=(sel_key,))
 
 with d_right:
+    study_subjs = get_study_subjects()
     raw_st = st.session_state.get(f"memo_study_time_{sel_key}", "")
     try:
         saved_st = json.loads(raw_st) if raw_st else {}
     except Exception:
         saved_st = {}
     total_mins = 0
-    for s in STUDY_SUBJS:
+    for s in study_subjs:
         h_k, m_k = f"st_{sel_key}_{s}_h", f"st_{sel_key}_{s}_m"
         st.session_state.setdefault(h_k, int(saved_st.get(s, [0, 0])[0]))
         st.session_state.setdefault(m_k, int(saved_st.get(s, [0, 0])[1]))
@@ -618,16 +606,21 @@ with d_right:
                 <span class="st-card-total">TOTAL : <b style="color:#4f46e5;">{tot_h}</b> h <b style="color:#4f46e5;">{tot_m:02d}</b> m</span>
             </div>
         """, unsafe_allow_html=True)
-        for row_subjs in [STUDY_SUBJS[:2], STUDY_SUBJS[2:]]:
+        for i in range(0, len(study_subjs), 2):
+            row_subjs = study_subjs[i:i+2]
             r_cols = st.columns(2, gap="medium")
             for idx, subj in enumerate(row_subjs):
                 with r_cols[idx]:
-                    st.markdown(f'<div class="st-subj-lbl">{subj}</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="st-subj-lbl">{html.escape(subj)}</div>', unsafe_allow_html=True)
                     hc, mc = st.columns(2, gap="small")
                     with hc:
                         st.number_input("h", min_value=0, max_value=24, step=1, key=f"st_{sel_key}_{subj}_h", on_change=save_study_time, args=(sel_key,))
                     with mc:
                         st.number_input("m", min_value=0, max_value=59, step=5, key=f"st_{sel_key}_{subj}_m", on_change=save_study_time, args=(sel_key,))
+
+    with st.expander("✏️ STUDY TIME 과목 이름 설정", expanded=False):
+        st.caption("쉼표(,)로 구분해서 입력 (예: 국어, 수학, 영어, 한국사, 과학)")
+        st.text_input("과목 목록", key="memo_study_subjects", label_visibility="collapsed", on_change=save_day, args=("study_subjects",))
 
     saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
     if saved_url:

@@ -95,56 +95,64 @@ def get_free_slots(wake_min: int, sleep_min: int, fixed_events):
 def free_minutes_of(slots) -> int:
     return sum(max(0, e - s) for s, e in slots)
 
+def split_into_chunks(total: int, parts: int):
+    base, rem = total // parts, total % parts
+    return [base + (1 if i < rem else 0) for i in range(parts)]
+
 def parse_weekly_tasks(text: str):
     tasks = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
-        custom_min = None
-        m_hr, m_min = re.search(r"(\d+)\s*시간", line), re.search(r"(\d+)\s*분", line)
-        if m_hr:
-            custom_min, line = int(m_hr.group(1)) * 60, re.sub(r"\d+\s*시간", "", line).strip()
-        elif m_min:
-            custom_min, line = int(m_min.group(1)), re.sub(r"\d+\s*분", "", line).strip()
 
-        # 1) 복합 반복: "총 3지문 각각 5번씩", "2단원 각각 3번"
+        # 1) 소요 시간 추출 ("1시간 반씩", "1시간 30분", "60분씩", "2시간")
+        dur = None
+        m_hb = re.search(r"(\d+)\s*시간\s*반(?:씩)?", line)
+        m_hm = re.search(r"(\d+)\s*시간\s*(\d+)\s*분(?:씩)?", line)
+        m_h = re.search(r"(\d+)\s*시간(?:씩)?", line)
+        m_m = re.search(r"(\d+)\s*분(?:씩)?", line)
+        if m_hb:
+            dur, line = int(m_hb.group(1)) * 60 + 30, (line[:m_hb.start()] + line[m_hb.end():]).strip()
+        elif m_hm:
+            dur, line = int(m_hm.group(1)) * 60 + int(m_hm.group(2)), (line[:m_hm.start()] + line[m_hm.end():]).strip()
+        elif m_h:
+            dur, line = int(m_h.group(1)) * 60, (line[:m_h.start()] + line[m_h.end():]).strip()
+        elif m_m:
+            dur, line = int(m_m.group(1)), (line[:m_m.start()] + line[m_m.end():]).strip()
+
+        # 2) 복합 반복 ("총 3지문 각각 5번씩")
         m_multi = re.search(r"(?:총\s*)?(\d+)\s*(지문|단원|과|강|챕터).*?각각\s*(\d+)\s*(?:번|회)씩?", line)
         if m_multi:
             n_items, unit, reps = int(m_multi.group(1)), m_multi.group(2), int(m_multi.group(3))
-            title = (line[:m_multi.start()] + line[m_multi.end():]).strip(" ,/-:") or line
+            title = (line[:m_multi.start()] + line[m_multi.end():]).strip(" ,/-:") or raw.strip()
             sessions = [f"{title} ({i}{unit} {r}/{reps}회)" for r in range(1, reps + 1) for i in range(1, n_items + 1)]
-            tasks.append({"mode": "sessions", "sessions": sessions, "dur": custom_min or 30})
+            tasks.append({"mode": "sessions", "sessions": sessions, "dur": dur or 30})
             continue
 
-        # 2) 주간 횟수/일수: "일주일에 4일", "일주일에 5번 읽기", "주 3회", "4번"
-        m_freq = re.search(r"(?:일주일에\s*|주\s*)?(\d+)\s*(일|번|회)(?:\s*씩)?", line)
-        if m_freq:
-            cnt = int(m_freq.group(1))
-            title = (line[:m_freq.start()] + line[m_freq.end():]).strip(" ,/-:") or line
-            sessions = [f"{title} ({i}/{cnt}회)" for i in range(1, cnt + 1)]
-            tasks.append({"mode": "spread_days", "sessions": sessions, "dur": custom_min or 45})
-            continue
+        # 3) 빈도/일수 추출 ("매일", "이틀에 한번", "일주일에 4번", "주 3회", "5일")
+        freq = None
+        if re.search(r"매일|하루에\s*한\s*번", line):
+            freq = 7
+            line = re.sub(r"매일|하루에\s*한\s*번", "", line).strip()
+        elif re.search(r"이틀에\s*한\s*번|격일", line):
+            freq = 4
+            line = re.sub(r"이틀에\s*한\s*번|격일", "", line).strip()
+        else:
+            m_freq = re.search(r"(?:일주일에\s*|주에\s*|주\s*)?(\d+)\s*(일|번|회)(?:씩)?", line)
+            if m_freq:
+                freq = int(m_freq.group(1))
+                line = (line[:m_freq.start()] + line[m_freq.end():]).strip()
 
-        # 3) 단원/강/지문: "3단원", "4강"
-        m_unit = re.search(r"(?:총\s*)?(\d+)\s*(단원|과|강|지문|회차)", line)
-        if m_unit:
-            cnt, unit = int(m_unit.group(1)), m_unit.group(2)
-            title = (line[:m_unit.start()] + line[m_unit.end():]).strip(" ,/-:") or line
-            sessions = [f"{title} {i}{unit}" for i in range(1, cnt + 1)]
-            tasks.append({"mode": "spread_days", "sessions": sessions, "dur": custom_min or 50})
-            continue
-
-        # 4) 총 분량(문제/페이지): "수학 200문제", "국어 70p"
-        m_qty = re.search(r"(\d+)\s*(문제|페이지|쪽|개|p|P)", line)
+        # 4) 분량/단원 추출 ("15단원", "200문제", "70p", "3강")
+        qty, unit = None, ""
+        m_qty = re.search(r"(?:총\s*)?(\d+)\s*(단원|과|강|지문|챕터|회차|문제|페이지|쪽|개|장|p|P)", line)
         if m_qty:
             qty, unit = int(m_qty.group(1)), m_qty.group(2)
-            title = (line[:m_qty.start()] + line[m_qty.end():]).strip(" ,/-:") or line
-            tasks.append({"mode": "split_qty", "title": title, "qty": qty, "unit": unit, "dur": custom_min or 50})
-            continue
+            line = (line[:m_qty.start()] + line[m_qty.end():]).strip()
 
-        # 5) 숫자 없는 일반 할 일 -> 주 2회 자동 배치
-        tasks.append({"mode": "spread_days", "sessions": [f"{line} (1/2회)", f"{line} (2/2회)"], "dur": custom_min or 50})
+        title = re.sub(r"\s+", " ", line).strip(" ,/-:") or raw.strip()
+        tasks.append({"mode": "smart", "title": title, "qty": qty, "unit": unit, "freq": freq, "dur": dur or 45})
     return tasks
 
 def place_in_day(day_slots, day_scheduled, d, label, dur, break_min):
@@ -170,48 +178,62 @@ def generate_weekly_schedule(week_dates, range_str: str, weekly_tasks_text: str,
         day_slots[d] = get_free_slots(wake_min, sleep_min, f_ev)
         day_scheduled[d] = [(s, e, f"📌 {t}") for s, e, t in f_ev]
 
+    SEQ_UNITS = {"단원", "과", "강", "지문", "챕터", "회차"}
+
     for task in tasks:
         dur = task["dur"]
-        mode = task["mode"]
+        if task["mode"] == "sessions":
+            for label in task["sessions"]:
+                best_d = max(active_days, key=lambda d: free_minutes_of(day_slots[d]))
+                if not place_in_day(day_slots, day_scheduled, best_d, label, dur, break_min):
+                    unscheduled.append(label)
+            continue
 
-        if mode == "split_qty":
-            # 빈 시간이 있는 날들에 분량을 비율대로 배분
-            avail = [(d, free_minutes_of(day_slots[d])) for d in active_days if free_minutes_of(day_slots[d]) >= dur]
-            if not avail:
-                unscheduled.append(f"{task['title']} {task['qty']}{task['unit']}")
-                continue
-            total_free = sum(f for _, f in avail)
-            assigned = []
-            rem = task["qty"]
-            for idx, (d, f) in enumerate(avail):
-                q = rem if idx == len(avail) - 1 else max(1, round(task["qty"] * (f / total_free)))
-                q = min(q, rem)
-                rem -= q
-                if q > 0:
-                    assigned.append((d, f"{task['title']} {q}{task['unit']}"))
-            for d, label in assigned:
+        title, qty, unit, freq = task["title"], task["qty"], task["unit"], task["freq"]
+
+        # 몇 일에 나눠서 배치할지 결정
+        if freq:
+            k = min(freq, n_days)
+        elif qty and unit in SEQ_UNITS:
+            k = min(qty, n_days)
+        elif qty:
+            k = n_days
+        else:
+            k = min(2, n_days)
+
+        # 빈 시간이 가장 넉넉한 k개 요일 선택 후 날짜순 정렬
+        ranked = sorted(active_days, key=lambda d: (-free_minutes_of(day_slots[d]), d))
+        chosen = sorted(ranked[:k])
+
+        sessions = []
+        if qty and unit in SEQ_UNITS:
+            if qty >= k:
+                chunks = split_into_chunks(qty, k)
+                cur = 1
+                for c in chunks:
+                    end = cur + c - 1
+                    rng = f"{cur}{unit}" if cur == end else f"{cur}~{end}{unit}"
+                    sessions.append(f"{title} {rng}")
+                    cur = end + 1
+            else:
+                for i in range(k):
+                    sessions.append(f"{title} {(i % qty) + 1}{unit}")
+        elif qty:
+            chunks = split_into_chunks(qty, k)
+            for c in chunks:
+                if c > 0:
+                    sessions.append(f"{title} {c}{unit}")
+        else:
+            cnt = freq if freq else k
+            sessions = [f"{title} ({i+1}/{cnt}회)" for i in range(cnt)]
+
+        # 배치 실행
+        if len(sessions) <= len(chosen):
+            for d, label in zip(chosen, sessions):
                 if not place_in_day(day_slots, day_scheduled, d, label, dur, break_min):
                     unscheduled.append(f"{d.month}/{d.day} {label}")
-
-        elif mode == "spread_days":
-            sessions = task["sessions"]
-            k = len(sessions)
-            if k <= n_days:
-                # 빈 시간이 가장 많은 k개 요일을 선택 후 날짜순 정렬
-                ranked = sorted(active_days, key=lambda d: (-free_minutes_of(day_slots[d]), d))
-                chosen = sorted(ranked[:k])
-                for d, label in zip(chosen, sessions):
-                    if not place_in_day(day_slots, day_scheduled, d, label, dur, break_min):
-                        unscheduled.append(f"{d.month}/{d.day} {label}")
-            else:
-                for label in sessions:
-                    best_d = max(active_days, key=lambda d: free_minutes_of(day_slots[d]))
-                    if not place_in_day(day_slots, day_scheduled, best_d, label, dur, break_min):
-                        unscheduled.append(label)
-
-        elif mode == "sessions":
-            # 횟수가 많은 경우 매번 가장 여유로운 요일에 배치
-            for label in task["sessions"]:
+        else:
+            for label in sessions:
                 best_d = max(active_days, key=lambda d: free_minutes_of(day_slots[d]))
                 if not place_in_day(day_slots, day_scheduled, best_d, label, dur, break_min):
                     unscheduled.append(label)
@@ -396,7 +418,7 @@ with t2:
     with st.expander(f"⚡ {picked_week_idx+1}주차 할 일 입력 → 요일별 자동 배분", expanded=False):
         wk_task_key = f"week_tasks_{picked_week_idx}"
         st.session_state.setdefault(f"memo_{wk_task_key}", "")
-        st.caption("예: 교과서 4번 읽기 / 수학 3단원 / 과학 일주일에 4일")
+        st.caption("편하게 한 줄씩 입력 (예: 국사 15단원 일주일에 4번 / 수학 60분씩 5일)")
         st.text_area("이번 주 할 일", key=f"memo_{wk_task_key}", height=115, label_visibility="collapsed", on_change=save_day, args=(wk_task_key,))
         break_min = st.number_input("과목 사이 휴식 시간(분)", min_value=0, max_value=30, value=10, step=5)
         if st.button("⚡ 이번 주(월~일) 시간표 자동 배분하기", use_container_width=True, type="primary"):

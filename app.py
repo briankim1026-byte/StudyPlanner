@@ -107,10 +107,75 @@ footer { visibility: hidden; }
 .fixed-chip-row { font-size: .78rem; padding: 5px 9px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 4px; color: #334155; word-break: break-word; }
 .detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
 .detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
-.hour-lbl { font-size: .8rem; font-weight: 800; color: #64748b; padding-top: 9px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.slot-box { border-radius: 11px; padding: 8px 13px; font-size: .85rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; word-break: break-word; }
-.slot-empty { background: #fff; border: 1.5px dashed #cbd5e1; color: #94a3b8; font-weight: 500; }
-.slot-fixed { background: #f1f5f9; border-left: 4px solid #94a3b8; color: #475569; }
+
+/* 하루 시간표 세로 표(Table) 스타일 */
+.tt-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #ffffff;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 6px 18px rgba(15,23,42,.04);
+    margin-bottom: 10px;
+}
+.tt-thead {
+    display: grid;
+    grid-template-columns: 106px minmax(0, 1fr);
+    background: #f1f5f9;
+    border-bottom: 1.5px solid #cbd5e1;
+    font-size: .8rem;
+    font-weight: 800;
+    color: #475569;
+}
+.tt-thead > div {
+    padding: 9px 12px;
+}
+.tt-thead > div:first-child {
+    text-align: center;
+    border-right: 1px solid #cbd5e1;
+}
+.tt-tr {
+    display: grid;
+    grid-template-columns: 106px minmax(0, 1fr);
+    border-bottom: 1px solid #e2e8f0;
+    min-height: 42px;
+}
+.tt-tr:last-child {
+    border-bottom: none;
+}
+.tt-td-time {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .78rem;
+    font-weight: 800;
+    color: #64748b;
+    background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+    padding: 8px 6px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.tt-td-body {
+    display: flex;
+    align-items: center;
+    padding: 8px 13px;
+    font-size: .85rem;
+    font-weight: 700;
+    word-break: break-word;
+}
+.tt-td-empty {
+    background: #ffffff;
+    color: #cbd5e1;
+    font-weight: 500;
+}
+.tt-td-fixed {
+    background: #f1f5f9;
+    color: #475569;
+    box-shadow: inset 4px 0 0 #94a3b8;
+}
+
 .st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
 .st-card-title { font-size: 1.02rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
 .st-card-total { font-size: .9rem; font-weight: 700; color: #475569; }
@@ -142,7 +207,7 @@ footer { visibility: hidden; }
 .stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
 .stButton > button[kind="primary"] { background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important; color: #fff !important; border: none !important; box-shadow: 0 4px 12px rgba(79,70,229,.28) !important; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
-.tt-row-marker, .mob-pair-marker, .cal-hidden-zone { display: none; height: 0; margin: 0; padding: 0; }
+.mob-pair-marker, .cal-hidden-zone { display: none; height: 0; margin: 0; padding: 0; }
 
 /* 달력 셀 터치 트리거용 숨김 버튼 영역 */
 .stElementContainer:has(.cal-hidden-zone) + *,
@@ -172,7 +237,7 @@ footer { visibility: hidden; }
     .stat-value { font-size: 1.35rem; }
     .sec-header { font-size: 1rem; margin: 14px 0 8px 0; }
 
-    /* 주간 7열 일자 달력: 아이폰에서도 월~일 한 줄 달력 형태로 깔끔하게 */
+    /* 주간 7열 일자 달력 */
     .wcal-wrap { padding: 8px 6px; border-radius: 14px; }
     .wcal-grid { gap: 3px; }
     .wcal-hdr { font-size: .74rem; padding-bottom: 4px; }
@@ -183,8 +248,14 @@ footer { visibility: hidden; }
 
     .detail-banner { padding: 11px 14px; border-radius: 14px; }
     .detail-banner span:first-child { font-size: .92rem !important; }
-    .hour-lbl { font-size: .72rem; padding-top: 0; text-align: left; }
-    .slot-box { padding: 7px 10px; font-size: .8rem; min-height: 36px; margin-bottom: 0; border-radius: 10px; }
+
+    /* 하루 시간표 표: 아이폰 폭 맞춤 */
+    .tt-table { border-radius: 13px; }
+    .tt-thead, .tt-tr { grid-template-columns: 84px minmax(0, 1fr); }
+    .tt-thead > div { padding: 7px 8px; font-size: .74rem; }
+    .tt-tr { min-height: 38px; }
+    .tt-td-time { font-size: .7rem; padding: 6px 4px; }
+    .tt-td-body { font-size: .8rem; padding: 7px 10px; }
 
     /* 2~4열 보조 버튼 가로 유지 */
     .stElementContainer:has(.mob-pair-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
@@ -205,31 +276,6 @@ footer { visibility: hidden; }
     .stElementContainer:has(.mob-pair-marker) + [data-testid="stHorizontalBlock"] .stButton > button {
         min-height: 40px !important;
         font-size: .82rem !important;
-    }
-
-    /* 타임테이블 행: 시간 + 넓은 일정 카드 1줄 유지 */
-    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"],
-    .stElementContainer:has(.tt-row-marker) + [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        gap: 6px !important;
-        align-items: center !important;
-        margin-bottom: 5px !important;
-    }
-    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(1),
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(1),
-    .stElementContainer:has(.tt-row-marker) + [data-testid="stHorizontalBlock"] > div:nth-child(1) {
-        width: 74px !important;
-        min-width: 74px !important;
-        max-width: 74px !important;
-        flex: 0 0 74px !important;
-    }
-    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(2),
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(2),
-    .stElementContainer:has(.tt-row-marker) + [data-testid="stHorizontalBlock"] > div:nth-child(2) {
-        width: auto !important;
-        min-width: 0 !important;
-        flex: 1 1 auto !important;
     }
 
     /* 아이폰 한달 달력 컴팩트 최적화 */
@@ -1201,7 +1247,7 @@ with t2:
                 distribute_days_and_grid(active_d, st.session_state.get("memo_fixed_range", "07:00-24:00"), parse_tasks(st.session_state.get(f"memo_{wk_task_key}", "")))
                 st.rerun()
 
-# 주간 할 일: 7일 한 줄(일자) 달력 그리드 (PC·아이폰 공통 7열 + 날짜 터치 시 아래 시간표로 바로 이동)
+# 주간 할 일: 7일 한 줄(일자) 달력 그리드
 st.markdown(f'<div class="sec-header"><span class="sec-dot"></span>{week_labels[picked_week_idx]} 주간 달력 <span style="font-size:.76rem; font-weight:600; color:#64748b;">(요일 터치 시 시간표 이동)</span></div>', unsafe_allow_html=True)
 
 wcal_cells = []
@@ -1385,6 +1431,7 @@ with d_left:
                     move_task_block(sel_key, chosen_lbl, free_hours, new_start_h=target_sh)
                     st.rerun()
 
+    # 세로 일자 표(Table) 형태의 하루 시간표
     slot_totals = {}
     for h in range(start_h, end_h):
         val = day_grid.get(str(h))
@@ -1392,39 +1439,45 @@ with d_left:
             slot_totals[val] = slot_totals.get(val, 0) + 1
     slot_seen = {}
 
+    tt_rows_html = [
+        '<div class="tt-table">',
+        '<div class="tt-thead"><div>시간</div><div>일정 · 할 일</div></div>'
+    ]
     for h in range(start_h, end_h):
         h_s, h_e = h * 60, (h + 1) * 60
         overlapping = [(s, e, title) for s, e, title in fixed_events if s < h_e and e > h_s]
         assigned = day_grid.get(str(h))
+        time_txt = fmt_slot_range(h)
 
-        st.markdown('<div class="tt-row-marker"></div>', unsafe_allow_html=True)
-        c_time, c_box = st.columns([1.35, 4.65], gap="small")
-        with c_time:
-            st.markdown(f'<div class="hour-lbl">{fmt_slot_range(h)}</div>', unsafe_allow_html=True)
-        with c_box:
-            if overlapping:
-                labels = []
-                for s, e, title in overlapping:
-                    if s > h_s or e < h_e:
-                        labels.append(f"{title} ({to_hhmm(s)}~{to_hhmm(e)})")
-                    else:
-                        labels.append(title)
-                st.markdown(f'<div class="slot-box slot-fixed">{html.escape(" · ".join(labels))}</div>', unsafe_allow_html=True)
-            elif assigned:
-                slot_seen[assigned] = slot_seen.get(assigned, 0) + 1
-                tot_c = slot_totals.get(assigned, 1)
-                cur_c = slot_seen[assigned]
-                clean_nm, intended_h = extract_task_hours(assigned)
-                if tot_c > 1:
-                    disp_lbl = f"{clean_nm} ({cur_c}/{tot_c}시간)"
-                elif intended_h > 1:
-                    disp_lbl = f"{clean_nm} (1시간)"
-                else:
-                    disp_lbl = clean_nm
-                bg, bd, fg, dot = color_map.get(assigned, ("#f8fafc", "#64748b", "#1e293b", "📌"))
-                st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{dot} {html.escape(disp_lbl)}</div>', unsafe_allow_html=True)
+        if overlapping:
+            labels = [
+                f"{title} ({to_hhmm(s)}~{to_hhmm(e)})" if (s > h_s or e < h_e) else title
+                for s, e, title in overlapping
+            ]
+            body_html = f'<div class="tt-td-body tt-td-fixed">{html.escape(" · ".join(labels))}</div>'
+        elif assigned:
+            slot_seen[assigned] = slot_seen.get(assigned, 0) + 1
+            tot_c = slot_totals.get(assigned, 1)
+            cur_c = slot_seen[assigned]
+            clean_nm, intended_h = extract_task_hours(assigned)
+            if tot_c > 1:
+                disp_lbl = f"{clean_nm} ({cur_c}/{tot_c}시간)"
+            elif intended_h > 1:
+                disp_lbl = f"{clean_nm} (1시간)"
             else:
-                st.markdown('<div class="slot-box slot-empty"></div>', unsafe_allow_html=True)
+                disp_lbl = clean_nm
+            bg, bd, fg, dot = color_map.get(assigned, ("#f8fafc", "#64748b", "#1e293b", "📌"))
+            body_html = (
+                f'<div class="tt-td-body" style="background:{bg}; color:{fg}; box-shadow:inset 4px 0 0 {bd};">'
+                f'{dot} {html.escape(disp_lbl)}</div>'
+            )
+        else:
+            body_html = '<div class="tt-td-body tt-td-empty">—</div>'
+
+        tt_rows_html.append(f'<div class="tt-tr"><div class="tt-td-time">{time_txt}</div>{body_html}</div>')
+
+    tt_rows_html.append('</div>')
+    st.markdown("".join(tt_rows_html), unsafe_allow_html=True)
 
     st.write("")
     with st.expander("✏️ 오늘 할 일 목록 직접 수정 & 자동 재정렬", expanded=False):

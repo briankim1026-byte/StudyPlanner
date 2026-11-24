@@ -126,8 +126,6 @@ footer { visibility: hidden; }
 .stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
 .stButton > button[kind="primary"] { background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important; color: #fff !important; border: none !important; box-shadow: 0 4px 12px rgba(79,70,229,.28) !important; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
-[data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
-[data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
 .tt-row-marker, .mob-pair-marker, .cal-hidden-zone { display: none; height: 0; margin: 0; padding: 0; }
 
 /* 달력 셀 터치 트리거용 숨김 버튼 영역 */
@@ -268,7 +266,7 @@ def save_day(day_key):
         "day_key": f"{USER_PREFIX}{day_key}",
         "memo": st.session_state.get(f"memo_{day_key}", ""),
         "is_done": bool(st.session_state.get(f"chk_{day_key}", False)),
-        "photo_url": st.session_state.get(f"photo_url_{day_key}", "")
+        "photo_url": ""
     }).execute()
 
 def get_habit_list():
@@ -905,17 +903,16 @@ def move_task_block(dk: str, target_task: str, free_hours, new_start_h=None, ste
 
 today = get_kst_today()
 
-# 2. 로그인한 사용자 데이터 로드 (기존 할 일 임의 삭제 없이 안전하게 로드)
+# 2. 로그인한 사용자 데이터 로드
 if st.session_state.get("db_loaded") != USER:
     for k in list(st.session_state.keys()):
-        if k.startswith(("memo_", "chk_", "photo_url_")):
+        if k.startswith(("memo_", "chk_")):
             del st.session_state[k]
     res_logs = supabase.table("daily_logs").select("*").like("day_key", f"{USER_PREFIX}%").execute()
     for row in res_logs.data:
         dk = row["day_key"][len(USER_PREFIX):]
         st.session_state[f"memo_{dk}"] = row.get("memo", "")
         st.session_state[f"chk_{dk}"] = bool(row.get("is_done", False))
-        st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
     if not st.session_state.get("memo_fixed_range"):
         st.session_state["memo_fixed_range"] = "07:00-24:00"
     if not st.session_state.get("memo_habit_list"):
@@ -1186,7 +1183,6 @@ for i, day in enumerate(active_week):
         if day is not None:
             dk = day.strftime('%Y_%m_%d')
             is_done = st.session_state.get(f"chk_{dk}", False)
-            has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
             if day == sel_day:
                 bg, border = "#f5f7ff", "2px solid #4f46e5"
             elif is_done:
@@ -1197,7 +1193,7 @@ for i, day in enumerate(active_week):
                 bg, border = "rgba(255,255,255,.92)", "1px solid #e2e8f0"
             day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
             today_chip = '<span class="today-chip">TODAY</span>' if day == today else ""
-            icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
+            icons = "✅" if is_done else ""
             st.markdown(f"""
                 <div class="week-card" style="background:{bg}; border:{border};">
                     <div class="week-date" style="color:{day_color};"><span>{day.month}/{day.day} ({WEEKDAY_KR[i]}){today_chip}</span><span>{icons}</span></div>
@@ -1241,7 +1237,6 @@ with d_left:
             </div>
         """, unsafe_allow_html=True)
 
-        # 지난 날짜에 못 끝낸 할 일이 있을 때 선택적으로 가져오는 버튼 (자동 삭제 방지)
         past_uncompleted = []
         for d in VALID_DATES:
             if d >= sel_day:
@@ -1451,22 +1446,6 @@ with d_right:
         st.caption("쉼표(,)로 구분해서 입력")
         st.text_input("습관 목록", key="memo_habit_list", label_visibility="collapsed", on_change=save_day, args=("habit_list",))
 
-    saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
-    if saved_url:
-        st.image(saved_url, use_container_width=True)
-    with st.expander("📤 오늘의 인증 사진 올리기 / 변경하기", expanded=False):
-        uploaded_file = st.file_uploader("인증 사진 선택", type=["jpg", "jpeg", "png"], key=f"photo_{sel_key}", label_visibility="collapsed")
-        if uploaded_file is not None:
-            file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-            if st.session_state.get(f"last_uploaded_{sel_key}") != file_id:
-                ext = uploaded_file.name.split(".")[-1].lower()
-                file_path = f"{USER}_{sel_key}_{int(time.time())}.{ext}"
-                supabase.storage.from_("photos").upload(file_path, uploaded_file.getvalue(), {"content-type": uploaded_file.type})
-                st.session_state[f"photo_url_{sel_key}"] = supabase.storage.from_("photos").get_public_url(file_path)
-                st.session_state[f"last_uploaded_{sel_key}"] = file_id
-                save_day(sel_key)
-                st.rerun()
-
 # 한눈에 보는 한달 달력 (기존 카드 모양 유지 + 날짜 칸 직접 터치 시 해당 날짜 시간표로 바로 이동)
 st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력 <span style="font-size:.76rem; font-weight:600; color:#64748b;">(날짜를 터치하면 바로 이동해요)</span></div>', unsafe_allow_html=True)
 
@@ -1481,7 +1460,6 @@ for week in WEEKS:
             dk = day.strftime('%Y_%m_%d')
             day_t_list = get_day_task_list(dk)
             is_done = st.session_state.get(f"chk_{dk}", False)
-            has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
             if day == sel_day:
                 bg, border = "#eef2ff", "2px solid #4f46e5"
             elif is_done:
@@ -1492,7 +1470,7 @@ for week in WEEKS:
                 bg, border = "#ffffff", "1px solid #e2e8f0"
             day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
             today_tag = '<span class="mcal-today-tag">TODAY</span>' if day == today else ""
-            icons = ("✅" if is_done else "") + ("📸" if has_photo else "")
+            icons = "✅" if is_done else ""
             cnt_badge = f'<span class="mcal-cnt">{len(day_t_list)}개</span>' if day_t_list else ""
             prev_txt = html.escape(day_t_list[0]) if day_t_list else ""
             cal_cells.append(

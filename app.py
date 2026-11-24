@@ -99,6 +99,27 @@ footer { visibility: hidden; }
 .st-card-title { font-size: 1.02rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
 .st-card-total { font-size: .9rem; font-weight: 700; color: #475569; }
 
+/* 기존 한달 달력 CSS Grid (각 날짜 칸 직접 터치 지원) */
+.mcal-wrap { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 12px 10px; box-shadow: 0 6px 20px rgba(15,23,42,.04); margin-bottom: 10px; }
+.mcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.mcal-hdr { text-align: center; font-weight: 800; font-size: .82rem; padding: 4px 0 6px 0; }
+.mcal-cell {
+    border-radius: 12px; padding: 7px 6px; min-height: 74px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    box-sizing: border-box; overflow: hidden;
+    cursor: pointer !important;
+    user-select: none;
+    -webkit-tap-highlight-color: rgba(79,70,229,.15);
+    transition: transform .12s ease, box-shadow .12s ease;
+}
+.mcal-cell:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(79,70,229,.12); }
+.mcal-cell:active { transform: scale(.96); }
+.mcal-empty { background: transparent; border: none; min-height: 40px; }
+.mcal-top { display: flex; justify-content: space-between; align-items: center; gap: 2px; font-weight: 800; font-size: .82rem; pointer-events: none; }
+.mcal-today-tag { font-size: .58rem; font-weight: 900; background: #f59e0b; color: #fff; padding: 1px 4px; border-radius: 999px; }
+.mcal-cnt { font-size: .7rem; font-weight: 700; color: #4f46e5; background: rgba(99,102,241,.1); padding: 1px 5px; border-radius: 6px; display: inline-block; width: fit-content; margin-top: 3px; }
+.mcal-prev { font-size: .68rem; color: #64748b; line-height: 1.25; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .stTextArea textarea, .stTextInput input { font-size: 16px !important; line-height: 1.55 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
 .stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
 .stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .8rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .4rem .55rem !important; }
@@ -107,47 +128,19 @@ footer { visibility: hidden; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
 [data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
 [data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
-.tt-row-marker, .mob-pair-marker, .mcal-row-marker { display: none; height: 0; margin: 0; padding: 0; }
+.tt-row-marker, .mob-pair-marker, .cal-hidden-zone { display: none; height: 0; margin: 0; padding: 0; }
 
-/* 터치형 한달 달력 7열 그리드 (PC·아이폰 공통) */
-.stElementContainer:has(.mcal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
-.element-container:has(.mcal-row-marker) + .element-container [data-testid="stHorizontalBlock"],
-.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] {
-    flex-wrap: nowrap !important;
-    gap: 5px !important;
-    margin-bottom: 5px !important;
-}
-.stElementContainer:has(.mcal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div,
-.element-container:has(.mcal-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div,
-.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] > div {
-    width: calc(14.28% - 4px) !important;
-    min-width: 0 !important;
-    flex: 1 1 0% !important;
-}
-.stElementContainer:has(.mcal-row-marker) + .stElementContainer .stButton > button,
-.element-container:has(.mcal-row-marker) + .element-container .stButton > button,
-.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] .stButton > button {
-    min-height: 68px !important;
-    padding: 7px 6px !important;
-    border-radius: 13px !important;
-    white-space: pre-line !important;
-    line-height: 1.35 !important;
-    font-size: .78rem !important;
-    text-align: left !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: flex-start !important;
-    justify-content: space-between !important;
-    box-shadow: 0 3px 10px rgba(15,23,42,.03) !important;
-}
-.stElementContainer:has(.mcal-row-marker) + .stElementContainer .stButton > button p,
-.element-container:has(.mcal-row-marker) + .element-container .stButton > button p,
-.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] .stButton > button p {
-    white-space: pre-line !important;
-    text-align: left !important;
-    margin: 0 !important;
-    width: 100% !important;
-    word-break: keep-all !important;
+/* 달력 셀 터치 트리거용 숨김 버튼 영역 */
+.stElementContainer:has(.cal-hidden-zone) + *,
+.element-container:has(.cal-hidden-zone) + * {
+    position: fixed !important;
+    left: -9999px !important;
+    top: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
 }
 
 /* 모바일(아이폰) 화면 최적화 */
@@ -170,7 +163,7 @@ footer { visibility: hidden; }
     .hour-lbl { font-size: .72rem; padding-top: 0; text-align: left; }
     .slot-box { padding: 7px 10px; font-size: .8rem; min-height: 36px; margin-bottom: 0; border-radius: 10px; }
 
-    /* 2~3열 보조 버튼 가로 유지 */
+    /* 2~4열 보조 버튼 가로 유지 */
     .stElementContainer:has(.mob-pair-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
     .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"],
     .stElementContainer:has(.mob-pair-marker) + [data-testid="stHorizontalBlock"] {
@@ -216,22 +209,15 @@ footer { visibility: hidden; }
         flex: 1 1 auto !important;
     }
 
-    /* 아이폰 터치형 한달 달력 컴팩트 최적화 */
-    .stElementContainer:has(.mcal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
-    .element-container:has(.mcal-row-marker) + .element-container [data-testid="stHorizontalBlock"],
-    .stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] {
-        gap: 3px !important;
-        margin-bottom: 3px !important;
-    }
-    .stElementContainer:has(.mcal-row-marker) + .stElementContainer .stButton > button,
-    .element-container:has(.mcal-row-marker) + .element-container .stButton > button,
-    .stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] .stButton > button {
-        min-height: 54px !important;
-        padding: 4px 3px !important;
-        border-radius: 9px !important;
-        font-size: .66rem !important;
-        line-height: 1.25 !important;
-    }
+    /* 아이폰 한달 달력 컴팩트 최적화 */
+    .mcal-wrap { padding: 8px 6px; border-radius: 14px; }
+    .mcal-grid { gap: 3px; }
+    .mcal-hdr { font-size: .74rem; padding-bottom: 4px; }
+    .mcal-cell { padding: 5px 3px; min-height: 54px; border-radius: 9px; }
+    .mcal-top { font-size: .68rem; flex-direction: column; align-items: flex-start; gap: 1px; }
+    .mcal-today-tag { font-size: .52rem; padding: 0 3px; }
+    .mcal-cnt { font-size: .6rem; padding: 0 4px; margin-top: 2px; }
+    .mcal-prev { display: none; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1463,65 +1449,108 @@ with d_right:
                 save_day(sel_key)
                 st.rerun()
 
-# 한눈에 보는 한달 달력 (날짜 칸 직접 터치 -> 해당 날짜 선택 + 시간표로 부드러운 자동 스크롤)
-st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력 <span style="font-size:.76rem; font-weight:600; color:#64748b;">(날짜 터치 시 바로 이동)</span></div>', unsafe_allow_html=True)
+# 한눈에 보는 한달 달력 (기존 카드 모양 유지 + 날짜 칸 직접 터치 시 해당 날짜 시간표로 바로 이동)
+st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력 <span style="font-size:.76rem; font-weight:600; color:#64748b;">(날짜를 터치하면 바로 이동해요)</span></div>', unsafe_allow_html=True)
 
-st.markdown('<div class="mcal-row-marker"></div>', unsafe_allow_html=True)
-hdr_cols = st.columns(7, gap="small")
+cal_cells = []
 for i, day_name in enumerate(WEEKDAY_KR):
     color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#64748b"
-    hdr_cols[i].markdown(f"<div style='text-align:center; font-weight:800; font-size:.82rem; color:{color}; padding-bottom:4px;'>{day_name}</div>", unsafe_allow_html=True)
+    cal_cells.append(f'<div class="mcal-hdr" style="color:{color};">{day_name}</div>')
 
 for week in WEEKS:
-    st.markdown('<div class="mcal-row-marker"></div>', unsafe_allow_html=True)
-    w_cal_cols = st.columns(7, gap="small")
     for i, day in enumerate(week):
-        with w_cal_cols[i]:
-            if day is not None:
-                dk = day.strftime('%Y_%m_%d')
-                day_t_list = get_day_task_list(dk)
-                is_done = st.session_state.get(f"chk_{dk}", False)
-                has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
-
-                top_line = f"{day.month}/{day.day}" + (" 🔥" if day == today else "")
-                icons = ("✅" if is_done else "") + ("📸" if has_photo else "")
-                cnt_txt = f"{len(day_t_list)}개" if day_t_list else "-"
-                bot_line = f"{icons} {cnt_txt}".strip()
-                cell_label = f"{top_line}\n{bot_line}"
-
-                st.button(
-                    cell_label,
-                    key=f"mcal_cell_btn_{dk}",
-                    type=("primary" if day == sel_day else "secondary"),
-                    use_container_width=True,
-                    on_click=select_day,
-                    args=(day, True)
-                )
+        if day is not None:
+            dk = day.strftime('%Y_%m_%d')
+            day_t_list = get_day_task_list(dk)
+            is_done = st.session_state.get(f"chk_{dk}", False)
+            has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
+            if day == sel_day:
+                bg, border = "#eef2ff", "2px solid #4f46e5"
+            elif is_done:
+                bg, border = "#ecfdf5", "1.5px solid #6ee7b7"
+            elif day == today:
+                bg, border = "#fffbeb", "2px solid #f59e0b"
             else:
-                st.write("")
+                bg, border = "#ffffff", "1px solid #e2e8f0"
+            day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
+            today_tag = '<span class="mcal-today-tag">TODAY</span>' if day == today else ""
+            icons = ("✅" if is_done else "") + ("📸" if has_photo else "")
+            cnt_badge = f'<span class="mcal-cnt">{len(day_t_list)}개</span>' if day_t_list else ""
+            prev_txt = html.escape(day_t_list[0]) if day_t_list else ""
+            cal_cells.append(
+                f'<div id="mcal-cell-{dk}" class="mcal-cell" style="background:{bg}; border:{border};">'
+                f'<div class="mcal-top" style="color:{day_color};"><span>{day.month}/{day.day} {today_tag}</span><span>{icons}</span></div>'
+                f'<div style="pointer-events:none;">{cnt_badge}<div class="mcal-prev">{prev_txt}</div></div>'
+                f'</div>'
+            )
+        else:
+            cal_cells.append('<div class="mcal-empty"></div>')
+
+st.markdown(f'<div class="mcal-wrap"><div class="mcal-grid">{"".join(cal_cells)}</div></div>', unsafe_allow_html=True)
+
+# 달력 셀 터치 이벤트를 연결하기 위한 숨김 버튼 묶음
+st.markdown('<div class="cal-hidden-zone"></div>', unsafe_allow_html=True)
+with st.container():
+    for d in VALID_DATES:
+        dk = d.strftime('%Y_%m_%d')
+        st.button(f"CALJUMP_{dk}", key=f"caljump_{dk}", on_click=select_day, args=(d, True))
 
 st.markdown('<div class="mob-pair-marker"></div>', unsafe_allow_html=True)
-nav1, nav2, nav3 = st.columns(3, gap="small")
+nav1, nav2, nav3, nav4 = st.columns([1, 2.3, 1, 1.1], gap="small")
 with nav1:
     st.button("◀ 이전 날", use_container_width=True, disabled=(sel_day <= START_DATE), on_click=select_day, args=(sel_day - timedelta(days=1), True), key="nav_prev_btn")
 with nav2:
-    today_target = today if START_DATE <= today <= END_DATE else START_DATE
-    st.button("📍 오늘로", use_container_width=True, on_click=select_day, args=(today_target, True), key="nav_today_btn")
+    def fmt_date_opt(d: date):
+        t_cnt = len(get_day_task_list(d.strftime('%Y_%m_%d')))
+        t_mark = " [TODAY]" if d == today else ""
+        return f"{d.month}/{d.day} ({WEEKDAY_KR[d.weekday()]}){t_mark} · 할일 {t_cnt}개"
+    jump_day = st.selectbox("날짜 바로 이동", VALID_DATES, index=VALID_DATES.index(sel_day), format_func=fmt_date_opt, label_visibility="collapsed")
+    if jump_day != sel_day:
+        select_day(jump_day, True)
+        st.rerun()
 with nav3:
     st.button("다음 날 ▶", use_container_width=True, disabled=(sel_day >= END_DATE), on_click=select_day, args=(sel_day + timedelta(days=1), True), key="nav_next_btn")
+with nav4:
+    today_target = today if START_DATE <= today <= END_DATE else START_DATE
+    st.button("📍 오늘로", use_container_width=True, on_click=select_day, args=(today_target, True), key="nav_today_btn")
 
-# 달력 날짜 클릭 시 하루 시간표 위치로 부드럽게 스크롤
-if st.session_state.pop("scroll_to_detail", False):
-    components.html("""
-        <script>
-            setTimeout(function() {
-                try {
-                    const el = window.parent.document.getElementById('daily-timetable-anchor');
-                    if (el) {
-                        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                } catch (e) {}
-            }, 150);
-        </script>
-    """, height=0)
+# 달력 날짜 셀 터치 바인딩 + 선택 시 하루 시간표로 부드럽게 스크롤
+scroll_flag = "true" if st.session_state.pop("scroll_to_detail", False) else "false"
+components.html(f"""
+    <!-- {time.time()} -->
+    <script>
+        (function() {{
+            try {{
+                const doc = window.parent.document;
+                if (!doc.body.dataset.mcalBound) {{
+                    doc.body.dataset.mcalBound = "1";
+                    doc.body.addEventListener("click", function(e) {{
+                        const cell = e.target.closest(".mcal-cell");
+                        if (!cell || !cell.id || !cell.id.startsWith("mcal-cell-")) return;
+                        const dk = cell.id.replace("mcal-cell-", "");
+                        const anchor = doc.getElementById("daily-timetable-anchor");
+                        if (anchor) {{
+                            anchor.scrollIntoView({{ behavior: "smooth", block: "start" }});
+                        }}
+                        const buttons = doc.querySelectorAll("button");
+                        for (const btn of buttons) {{
+                            if ((btn.innerText || "").trim() === "CALJUMP_" + dk) {{
+                                btn.click();
+                                break;
+                            }}
+                        }}
+                    }});
+                }}
+                if ({scroll_flag}) {{
+                    setTimeout(function() {{
+                        const anchor = doc.getElementById("daily-timetable-anchor");
+                        if (anchor) {{
+                            anchor.scrollIntoView({{ behavior: "smooth", block: "start" }});
+                        }}
+                    }}, 150);
+                }}
+            }} catch (err) {{}}
+        }})();
+    </script>
+""", height=0)
 # 끝

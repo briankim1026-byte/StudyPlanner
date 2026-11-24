@@ -292,6 +292,21 @@ def remove_fixed_event_visual(wd_i: int, target_ev):
     st.session_state[f"memo_fixed_{wd_i}"] = "\n".join(f"{to_hhmm(s)}-{to_hhmm(e)} {t}" for s, e, t in evs)
     save_day(f"fixed_{wd_i}")
 
+def update_fixed_event_visual(old_wd: int, old_ev, new_wd: int, new_name: str, new_start_str: str, new_end_str: str):
+    s_h, s_m = map(int, new_start_str.split(":"))
+    e_h, e_m = map(int, new_end_str.split(":"))
+    s_tot, e_tot = s_h * 60 + s_m, e_h * 60 + e_m
+    if e_tot <= s_tot:
+        return "종료 시간은 시작 시간보다 늦어야 해요."
+    remove_fixed_event_visual(old_wd, old_ev)
+    evs = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{new_wd}", ""))
+    if (s_tot, e_tot, new_name) not in evs:
+        evs.append((s_tot, e_tot, new_name))
+    evs.sort(key=lambda x: x[0])
+    st.session_state[f"memo_fixed_{new_wd}"] = "\n".join(f"{to_hhmm(s)}-{to_hhmm(e)} {t}" for s, e, t in evs)
+    save_day(f"fixed_{new_wd}")
+    return ""
+
 def clear_all_fixed_schedules():
     st.session_state["memo_fixed_range"] = "07:00-24:00"
     save_day("fixed_range")
@@ -824,7 +839,7 @@ with t1:
                 else:
                     st.rerun()
 
-        # 등록된 고정 일정 한눈에 보기 & 개별/전체 삭제
+        # 등록된 고정 일정 한눈에 보기 & 수정 / 삭제
         all_saved_evs = []
         for wd_i in range(7):
             evs = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_i}", ""))
@@ -840,21 +855,64 @@ with t1:
                     joined = " · ".join(f"{to_hhmm(s)}~{to_hhmm(e)} {html.escape(t)}" for s, e, t in evs)
                     st.markdown(f'<div class="fixed-chip-row"><b>{WEEKDAY_KR[wd_i]}</b> | {joined}</div>', unsafe_allow_html=True)
 
-            del_choice = st.selectbox(
-                "삭제할 일정 선택",
+            target_choice = st.selectbox(
+                "수정 · 삭제할 일정 선택",
                 all_saved_evs,
                 format_func=lambda x: f"[{WEEKDAY_KR[x[0]]}] {to_hhmm(x[1][0])}~{to_hhmm(x[1][1])} {x[1][2]}",
                 key="ui_del_fix_sel"
             )
-            dc_a, dc_b = st.columns(2)
-            with dc_a:
-                if st.button("🗑️ 선택한 일정 삭제", use_container_width=True):
-                    remove_fixed_event_visual(del_choice[0], del_choice[1])
+            dc_e, dc_d, dc_c = st.columns(3)
+            with dc_e:
+                if st.button("✏️ 수정", use_container_width=True):
+                    st.session_state["editing_fixed_item"] = target_choice
                     st.rerun()
-            with dc_b:
+            with dc_d:
+                if st.button("🗑️ 삭제", use_container_width=True):
+                    remove_fixed_event_visual(target_choice[0], target_choice[1])
+                    st.session_state.pop("editing_fixed_item", None)
+                    st.rerun()
+            with dc_c:
                 if st.button("🧹 전체 비우기", use_container_width=True):
                     clear_all_fixed_schedules()
+                    st.session_state.pop("editing_fixed_item", None)
                     st.rerun()
+
+            edit_item = st.session_state.get("editing_fixed_item")
+            if edit_item and edit_item in all_saved_evs:
+                old_wd, old_ev = edit_item
+                old_s_str, old_e_str, old_name = to_hhmm(old_ev[0]), to_hhmm(old_ev[1]), old_ev[2]
+                edit_opts = sorted(set(TIME_OPTS_30M + [old_s_str, old_e_str]))
+                uid = f"{old_wd}_{old_ev[0]}_{old_ev[1]}_{old_name}"
+
+                with st.container(border=True):
+                    st.markdown(f"**✏️ 일정 수정** (`[{WEEKDAY_KR[old_wd]}] {old_s_str}~{old_e_str} {html.escape(old_name)}`)")
+                    ec1, ec2 = st.columns([1, 2])
+                    with ec1:
+                        new_wd_lbl = st.selectbox("요일", WEEKDAY_KR, index=old_wd, key=f"ed_wd_{uid}")
+                    with ec2:
+                        new_name = st.text_input("일정 이름", value=old_name, key=f"ed_nm_{uid}")
+                    et1, et2 = st.columns(2)
+                    with et1:
+                        new_s_str = st.selectbox("시작 시간", edit_opts, index=edit_opts.index(old_s_str), key=f"ed_st_{uid}")
+                    with et2:
+                        new_e_str = st.selectbox("종료 시간", edit_opts, index=edit_opts.index(old_e_str), key=f"ed_et_{uid}")
+
+                    eb1, eb2 = st.columns(2)
+                    with eb1:
+                        if st.button("💾 수정 저장", use_container_width=True, type="primary", key=f"ed_sv_{uid}"):
+                            if not new_name.strip():
+                                st.warning("일정 이름을 입력해 주세요.")
+                            else:
+                                err = update_fixed_event_visual(old_wd, old_ev, WEEKDAY_KR.index(new_wd_lbl), new_name.strip(), new_s_str, new_e_str)
+                                if err:
+                                    st.warning(err)
+                                else:
+                                    st.session_state.pop("editing_fixed_item", None)
+                                    st.rerun()
+                    with eb2:
+                        if st.button("취소", use_container_width=True, key=f"ed_cn_{uid}"):
+                            st.session_state.pop("editing_fixed_item", None)
+                            st.rerun()
 
 with t2:
     with st.expander("⚡ 시험 전까지 전체 할 일 → 주간·일간·시간표 자동 배분", expanded=False):

@@ -23,6 +23,10 @@ WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
 WD_MAP = {d: i for i, d in enumerate(WEEKDAY_KR)}
 CONDITIONS = ["😊 좋음", "😐 보통", "😫 피곤"]
 
+WAKE_HOURS = list(range(5, 13))        # 05:00 ~ 12:00
+SLEEP_HOURS = list(range(20, 28))      # 20:00 ~ 03:00 (새벽)
+TIME_OPTS_30M = [f"{m // 60:02d}:{m % 60:02d}" for m in range(360, 1441, 30)]
+
 TASK_COLORS = [
     ("#eef2ff", "#6366f1", "#312e81", "🟣"),
     ("#ecfdf5", "#10b981", "#065f46", "🟢"),
@@ -75,6 +79,7 @@ footer { visibility: hidden; }
 .week-date { font-weight: 800; font-size: .92rem; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid rgba(148,163,184,.18); display: flex; justify-content: space-between; align-items: center; }
 .today-chip { font-size: .65rem; font-weight: 800; background: #f59e0b; color: #fff; padding: 2px 6px; border-radius: 999px; margin-left: 4px; }
 .sch-item { font-size: .75rem; line-height: 1.38; padding: 5px 8px; border-radius: 8px; margin-bottom: 5px; word-break: break-word; font-weight: 600; }
+.fixed-chip-row { font-size: .78rem; padding: 5px 9px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 4px; color: #334155; }
 .detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; }
 .detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
 .hour-lbl { font-size: .82rem; font-weight: 800; color: #64748b; padding-top: 8px; text-align: right; font-variant-numeric: tabular-nums; }
@@ -142,6 +147,9 @@ USER_PREFIX = f"u_{USER}__"
 
 # 2. 로그인한 사용자 데이터 로드
 if st.session_state.get("db_loaded") != USER:
+    for k in list(st.session_state.keys()):
+        if k.startswith(("memo_", "chk_", "photo_url_")):
+            del st.session_state[k]
     res_logs = supabase.table("daily_logs").select("*").like("day_key", f"{USER_PREFIX}%").execute()
     for row in res_logs.data:
         dk = row["day_key"][len(USER_PREFIX):]
@@ -210,11 +218,24 @@ TIME_PAT = r"(\d{1,2})\s*(?::\s*(\d{2})|시(?:\s*(\d{1,2})\s*분?)?)"
 def parse_time_groups(h_str, m1_str, m2_str) -> int:
     return int(h_str) * 60 + (int(m1_str) if m1_str else (int(m2_str) if m2_str else 0))
 
+def to_hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+def fmt_hour_label(h: int) -> str:
+    if h < 24:
+        return f"{h:02d}:00"
+    if h == 24:
+        return "24:00 (자정)"
+    return f"새벽 {h - 24:02d}:00"
+
 def parse_range(range_str: str, default=(420, 1440)):
     m = re.search(rf"{TIME_PAT}\s*[-~]\s*{TIME_PAT}", (range_str or "").strip())
     if m:
-        s, e = parse_time_groups(m.group(1), m.group(2), m.group(3)), parse_time_groups(m.group(4), m.group(5), m.group(6))
-        if e > s:
+        s = parse_time_groups(m.group(1), m.group(2), m.group(3))
+        e = parse_time_groups(m.group(4), m.group(5), m.group(6))
+        if e <= s:
+            e += 1440
+        if 0 <= s < e <= 2160:
             return s, e
     return default
 
@@ -223,14 +244,18 @@ def parse_fixed_schedule(text: str):
     for line in (text or "").splitlines():
         m = re.match(rf"{TIME_PAT}\s*[-~]\s*{TIME_PAT}\s*(.+)", line.strip())
         if m:
-            s, e, t = parse_time_groups(m.group(1), m.group(2), m.group(3)), parse_time_groups(m.group(4), m.group(5), m.group(6)), m.group(7).strip()
+            s = parse_time_groups(m.group(1), m.group(2), m.group(3))
+            e = parse_time_groups(m.group(4), m.group(5), m.group(6))
+            t = m.group(7).strip()
+            if e <= s and e <= 240:
+                e += 1440
             if e > s and t:
                 events.append((s, e, t))
     return sorted(events, key=lambda x: x[0])
 
 def get_free_hours(wd_idx: int, range_str: str):
     wake_min, sleep_min = parse_range(range_str)
-    start_h, end_h = max(0, wake_min // 60), min(24, (sleep_min + 59) // 60)
+    start_h, end_h = max(0, wake_min // 60), min(30, (sleep_min + 59) // 60)
     fixed_events = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_idx}", ""))
     free_h = []
     for h in range(start_h, end_h):
@@ -238,6 +263,41 @@ def get_free_hours(wd_idx: int, range_str: str):
         if not any(s < h_e and e > h_s for s, e, _ in fixed_events):
             free_h.append(h)
     return free_h
+
+def save_wake_sleep_dropdowns():
+    wh = int(st.session_state.get("ui_wake_h", 7))
+    sh = int(st.session_state.get("ui_sleep_h", 24))
+    end_h_24 = sh if sh <= 24 else (sh - 24)
+    st.session_state["memo_fixed_range"] = f"{wh:02d}:00-{end_h_24:02d}:00"
+    save_day("fixed_range")
+
+def add_fixed_event_visual(name: str, selected_wds, start_str: str, end_str: str):
+    s_h, s_m = map(int, start_str.split(":"))
+    e_h, e_m = map(int, end_str.split(":"))
+    s_tot, e_tot = s_h * 60 + s_m, e_h * 60 + e_m
+    if e_tot <= s_tot:
+        return "종료 시간은 시작 시간보다 늦어야 해요."
+    for wd_i in selected_wds:
+        evs = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_i}", ""))
+        if (s_tot, e_tot, name) not in evs:
+            evs.append((s_tot, e_tot, name))
+        evs.sort(key=lambda x: x[0])
+        st.session_state[f"memo_fixed_{wd_i}"] = "\n".join(f"{to_hhmm(s)}-{to_hhmm(e)} {t}" for s, e, t in evs)
+        save_day(f"fixed_{wd_i}")
+    return ""
+
+def remove_fixed_event_visual(wd_i: int, target_ev):
+    evs = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_i}", ""))
+    evs = [ev for ev in evs if ev != target_ev]
+    st.session_state[f"memo_fixed_{wd_i}"] = "\n".join(f"{to_hhmm(s)}-{to_hhmm(e)} {t}" for s, e, t in evs)
+    save_day(f"fixed_{wd_i}")
+
+def clear_all_fixed_schedules():
+    st.session_state["memo_fixed_range"] = "07:00-24:00"
+    save_day("fixed_range")
+    for wd_i in range(7):
+        st.session_state[f"memo_fixed_{wd_i}"] = ""
+        save_day(f"fixed_{wd_i}")
 
 def split_into_chunks(total: int, parts: int):
     base, rem = total // parts, total % parts
@@ -270,7 +330,6 @@ def parse_tasks(text: str):
         if not line:
             continue
 
-        # 1) 시간(N시간 / N분) 추출
         hours = 1
         dur_txt = ""
         for pat, h_fn, txt_fn in [
@@ -286,7 +345,6 @@ def parse_tasks(text: str):
                 line = (line[:mm.start()] + " " + line[mm.end():]).strip()
                 break
 
-        # 2) 요일 범위 ("월-토요일 중에", "월~토", "평일 중에", "주말 중에")
         allowed_days = None
         m_rng = re.search(r"([월화수목금토일])(?:요일)?\s*[-~]\s*([월화수목금토일])(?:요일)?(?:\s*중에|\s*중|\s*사이)?", line)
         if m_rng:
@@ -300,7 +358,6 @@ def parse_tasks(text: str):
             allowed_days = [5, 6]
             line = re.sub(r"주말(?:\s*중에|\s*중)?", " ", line).strip()
 
-        # 3) 특정 요일 지정 ("일요일,화요일,목요일", "월,수,금", "화목")
         specific_days = None
         m_list = re.search(r"(?:[월화수목금토일]요일(?:\s*[,/·]\s*[월화수목금토일]요일)*)|(?:[월화수목금토일](?:\s*[,/·]\s*[월화수목금토일])+)", line)
         if m_list:
@@ -318,14 +375,12 @@ def parse_tasks(text: str):
                     specific_days = [WD_MAP[m_one.group(1)]]
                     line = (line[:m_one.start()] + " " + line[m_one.end():]).strip()
 
-        # 4) 회독 배수 ("* 3회독", "x 3회독", "3회독")
         rounds = 1
         m_rnd = re.search(r"(?:[*xX×]\s*)?(\d+)\s*회독", line)
         if m_rnd:
             rounds = max(1, int(m_rnd.group(1)))
             line = (line[:m_rnd.start()] + " " + line[m_rnd.end():]).strip()
 
-        # 5) 복합 반복 ("총 3지문 각각 5번씩")
         m_multi = re.search(r"(?:총\s*)?(\d+)\s*(지문|단원|과|강|챕터).*?각각\s*(\d+)\s*(?:번|회)씩?", line)
         if m_multi:
             n_items, unit, reps = int(m_multi.group(1)), m_multi.group(2), int(m_multi.group(3))
@@ -334,7 +389,6 @@ def parse_tasks(text: str):
             tasks.append({"mode": "sessions", "sessions": sessions, "hours": hours, "is_weekly_repeat": False})
             continue
 
-        # 6) 주간 횟수/일수 ("일주일에 3번", "2일", "매일", "격일")
         freq, is_weekly_repeat = None, False
         if specific_days:
             freq, is_weekly_repeat = len(specific_days), True
@@ -356,14 +410,12 @@ def parse_tasks(text: str):
                 )
                 line = (line[:m_freq.start()] + " " + line[m_freq.end():]).strip()
 
-        # 7) 총 분량/단원 ("총 22단원", "300문제", "70p")
         qty, unit = None, ""
         m_qty = re.search(r"(?:총\s*)?(\d+)\s*(단원|과|강|지문|챕터|회차|문제|페이지|쪽|개|장|p|P)", line)
         if m_qty:
             qty, unit = int(m_qty.group(1)), m_qty.group(2)
             line = (line[:m_qty.start()] + " " + line[m_qty.end():]).strip()
 
-        # 남은 불필요한 부사 제거 후 제목 추출
         line = re.sub(r"\b(?:일주일에|주에|중에|각각)\b", " ", line)
         title = re.sub(r"\s+", " ", line).strip(" ,/-:*xX×") or raw.strip()
         if dur_txt and hours > 1:
@@ -374,45 +426,30 @@ def parse_tasks(text: str):
             base_label = title
 
         tasks.append({
-            "mode": "smart",
-            "title": title,
-            "base_label": base_label,
-            "qty": qty,
-            "unit": unit,
-            "rounds": rounds,
-            "freq": freq,
-            "hours": hours,
-            "specific_days": specific_days,
-            "allowed_days": allowed_days,
+            "mode": "smart", "title": title, "base_label": base_label,
+            "qty": qty, "unit": unit, "rounds": rounds, "freq": freq,
+            "hours": hours, "specific_days": specific_days, "allowed_days": allowed_days,
             "is_weekly_repeat": is_weekly_repeat,
         })
     return tasks
 
 def format_round_chunk(title: str, unit: str, items):
-    # items: list of (round_no, unit_no)
     groups = []
     for r, u in items:
         if groups and groups[-1][0] == r:
             groups[-1][2] = u
         else:
             groups.append([r, u, u])
-    parts = []
-    for r, s_u, e_u in groups:
-        rng = f"{s_u}{unit}" if s_u == e_u else f"{s_u}~{e_u}{unit}"
-        parts.append(f"{r}회독 {rng}")
+    parts = [f"{r}회독 {f'{s_u}{unit}' if s_u == e_u else f'{s_u}~{e_u}{unit}'}" for r, s_u, e_u in groups]
     return f"{title} " + " · ".join(parts)
 
 def auto_fill_day_grid(d: date, task_entries, range_str: str):
-    # task_entries: list of (label, hours)
     dk = d.strftime('%Y_%m_%d')
     free_hours = get_free_hours(d.weekday(), range_str)
-    used = set()
-    grid = {}
-
+    used, grid = set(), {}
     for label, hrs in task_entries:
         hrs = max(1, hrs)
         placed = False
-        # 연속된 hrs시간 빈 칸 우선 탐색
         if hrs > 1 and len(free_hours) >= hrs:
             for i in range(len(free_hours) - hrs + 1):
                 block = free_hours[i:i+hrs]
@@ -431,7 +468,6 @@ def auto_fill_day_grid(d: date, task_entries, range_str: str):
                     cnt += 1
                     if cnt == hrs:
                         break
-
     st.session_state[f"memo_grid_{dk}"] = json.dumps(grid, ensure_ascii=False)
     save_day(f"grid_{dk}")
 
@@ -439,19 +475,13 @@ def distribute_days_and_grid(active_days, range_str: str, tasks):
     n_days = len(active_days)
     if not n_days or not tasks:
         return
-
     day_free = {d: len(get_free_hours(d.weekday(), range_str)) for d in active_days}
     day_load = {d: 0 for d in active_days}
-    day_entries = {d: [] for d in active_days}  # list of (label, hours)
+    day_entries = {d: [] for d in active_days}
     SEQ_UNITS = {"단원", "과", "강", "지문", "챕터", "회차"}
 
-    # 제약 조건이 엄격한 작업(특정 요일 > 요일 범위 > 자유 배분) 순으로 정렬
     def task_priority(t):
-        if t.get("specific_days"):
-            return 0
-        if t.get("allowed_days"):
-            return 1
-        return 2
+        return 0 if t.get("specific_days") else (1 if t.get("allowed_days") else 2)
 
     for task in sorted(tasks, key=task_priority):
         hrs = task.get("hours", 1)
@@ -462,7 +492,6 @@ def distribute_days_and_grid(active_days, range_str: str, tasks):
                 day_load[best_d] += hrs
             continue
 
-        # 다회독(예: 22단원 * 3회독) 처리
         if task.get("rounds", 1) > 1 and task.get("qty"):
             all_items = [(r, u) for r in range(1, task["rounds"] + 1) for u in range(1, task["qty"] + 1)]
             pool = [d for d in active_days if not task.get("allowed_days") or d.weekday() in task["allowed_days"]] or active_days
@@ -472,16 +501,13 @@ def distribute_days_and_grid(active_days, range_str: str, tasks):
                 sub = all_items[cur:cur+c]
                 cur += c
                 if sub:
-                    lbl = format_round_chunk(task["title"], task["unit"], sub)
-                    day_entries[d].append((lbl, hrs))
+                    day_entries[d].append((format_round_chunk(task["title"], task["unit"], sub), hrs))
                     day_load[d] += hrs
             continue
 
-        title = task["title"]
-        base_label = task.get("base_label", title)
+        title, base_label = task["title"], task.get("base_label", task["title"])
         qty, unit, freq = task["qty"], task["unit"], task["freq"]
-        spec_days = task.get("specific_days")
-        allow_days = task.get("allowed_days")
+        spec_days, allow_days = task.get("specific_days"), task.get("allowed_days")
 
         if spec_days:
             chosen = [d for d in active_days if d.weekday() in spec_days]
@@ -501,8 +527,7 @@ def distribute_days_and_grid(active_days, range_str: str, tasks):
                 cur = start_num
                 for c in split_into_chunks(qty, k):
                     end = cur + c - 1
-                    rng = f"{cur}{unit}" if cur == end else f"{cur}~{end}{unit}"
-                    sessions.append(f"{title} {rng}")
+                    sessions.append(f"{title} {cur}{unit}" if cur == end else f"{title} {cur}~{end}{unit}")
                     cur = end + 1
             else:
                 sessions = [f"{title} {start_num + (i % qty)}{unit}" for i in range(k)]
@@ -525,11 +550,8 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
     tasks = parse_tasks(total_text)
     if not tasks:
         return
-    active_weeks = []
-    for w_idx, wk in enumerate(WEEKS):
-        days_in_wk = [d for d in wk if d is not None and start_d <= d <= end_d]
-        if days_in_wk:
-            active_weeks.append((w_idx, days_in_wk))
+    active_weeks = [(w_idx, [d for d in wk if d is not None and start_d <= d <= end_d]) for w_idx, wk in enumerate(WEEKS)]
+    active_weeks = [(w_idx, days) for w_idx, days in active_weeks if days]
     n_wks = len(active_weeks)
     if not n_wks:
         return
@@ -551,12 +573,10 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
                     week_summary_lines[w_idx].append(f"{sub[0]} 외 {len(sub)-1}건" if len(sub) > 1 else sub[0])
             continue
 
-        # 다회독 전체 기간 분할 -> 각 주차별 exact task로 전달
         if task.get("rounds", 1) > 1 and task.get("qty"):
             all_items = [(r, u) for r in range(1, task["rounds"] + 1) for u in range(1, task["qty"] + 1)]
             chunks = split_into_chunks(len(all_items), len(all_active_days))
-            day_item_map = {}
-            cur = 0
+            day_item_map, cur = {}, 0
             for d, c in zip(all_active_days, chunks):
                 day_item_map[d] = all_items[cur:cur+c]
                 cur += c
@@ -564,7 +584,6 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
                 wk_items = [it for d in days_in_wk for it in day_item_map[d]]
                 if wk_items:
                     week_summary_lines[w_idx].append(format_round_chunk(task["title"], task["unit"], wk_items))
-                # 주차 내 각 날짜에 정확히 그날의 회독 몫이 들어가도록 1일 단위 세션으로 전달
                 for d in days_in_wk:
                     if day_item_map[d]:
                         lbl = format_round_chunk(task["title"], task["unit"], day_item_map[d])
@@ -576,8 +595,7 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
                         })
             continue
 
-        title = task["title"]
-        base_label = task.get("base_label", title)
+        title, base_label = task["title"], task.get("base_label", task["title"])
         qty, unit, freq, is_wk_rep = task["qty"], task["unit"], task["freq"], task["is_weekly_repeat"]
 
         if is_wk_rep and not qty:
@@ -594,8 +612,7 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
             for (w_idx, _), c in zip(active_weeks, chunks):
                 if c > 0:
                     t_copy = dict(task)
-                    t_copy["qty"] = c
-                    t_copy["start_num"] = cur
+                    t_copy["qty"], t_copy["start_num"] = c, cur
                     week_task_objs[w_idx].append(t_copy)
                     if unit in SEQ_UNITS:
                         rng = f"{cur}{unit}" if c == 1 else f"{cur}~{cur+c-1}{unit}"
@@ -669,7 +686,7 @@ def move_hour_slot(dk: str, hour: int, direction: int, free_hours):
 
 today = date.today()
 
-# 사이드바 (백색소음 제거됨)
+# 사이드바
 with st.sidebar:
     uc1, uc2 = st.columns([2.2, 1])
     with uc1:
@@ -765,22 +782,79 @@ active_week = WEEKS[picked_week_idx]
 
 t1, t2 = st.columns(2, gap="medium")
 with t1:
-    with st.expander("⚙️ 고정 시간표 설정 (학교 · 학원)", expanded=False):
-        st.text_input("기상~취침 시간 (예: 7시-24시)", key="memo_fixed_range", on_change=save_day, args=("fixed_range",))
-        target_opt = st.selectbox("설정할 요일", ["평일 전체 (월~금)"] + WEEKDAY_KR)
-        if target_opt == "평일 전체 (월~금)":
-            st.caption("평일 공통 고정 일정 (예: 8시-16시 학교)")
-            bulk_txt = st.text_area("평일 공통 고정 일정", value=st.session_state.get("memo_fixed_0", ""), height=100, label_visibility="collapsed")
-            if st.button("💾 평일(월~금)에 한꺼번에 저장", use_container_width=True):
-                for wd_i in range(5):
-                    st.session_state[f"memo_fixed_{wd_i}"] = bulk_txt
-                    save_day(f"fixed_{wd_i}")
-                st.success("월~금 고정 시간표가 모두 저장됐어요!")
-        else:
-            fk = f"fixed_{WEEKDAY_KR.index(target_opt)}"
-            st.session_state.setdefault(f"memo_{fk}", "")
-            st.caption(f"{target_opt}요일 고정 일정 (학교 + 학원 시간)")
-            st.text_area(f"{target_opt}요일 고정 일정", key=f"memo_{fk}", height=100, label_visibility="collapsed", on_change=save_day, args=(fk,))
+    with st.expander("⚙️ 고정 시간표 설정 (클릭형 간편 등록)", expanded=False):
+        cur_w, cur_s = parse_range(st.session_state.get("memo_fixed_range", "07:00-24:00"))
+        cur_wh = min(max(cur_w // 60, WAKE_HOURS[0]), WAKE_HOURS[-1])
+        cur_sh = min(max(cur_s // 60, SLEEP_HOURS[0]), SLEEP_HOURS[-1])
+        st.session_state["ui_wake_h"] = cur_wh
+        st.session_state["ui_sleep_h"] = cur_sh
+
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            st.selectbox("🌅 기상 시간", WAKE_HOURS, format_func=fmt_hour_label, key="ui_wake_h", on_change=save_wake_sleep_dropdowns)
+        with rc2:
+            st.selectbox("🌙 취침 시간", SLEEP_HOURS, format_func=fmt_hour_label, key="ui_sleep_h", on_change=save_wake_sleep_dropdowns)
+
+        st.markdown("---")
+        st.markdown("**➕ 학교 · 학원 일정 간편 추가**")
+        ev_name = st.text_input("일정 이름", placeholder="예: 학교, 수학학원, 영어학원", key="ui_fix_name")
+        st.caption("해당 요일을 모두 체크하세요")
+        wd_cols = st.columns(7)
+        checked_wds = []
+        for idx_w, wd_lbl in enumerate(WEEKDAY_KR):
+            with wd_cols[idx_w]:
+                if st.checkbox(wd_lbl, value=(idx_w < 5), key=f"ui_fix_wd_{idx_w}"):
+                    checked_wds.append(idx_w)
+
+        tc1, tc2 = st.columns(2)
+        with tc1:
+            ev_start = st.selectbox("시작 시간", TIME_OPTS_30M, index=TIME_OPTS_30M.index("08:00"), key="ui_fix_s")
+        with tc2:
+            ev_end = st.selectbox("종료 시간", TIME_OPTS_30M, index=TIME_OPTS_30M.index("16:00"), key="ui_fix_e")
+
+        if st.button("➕ 선택한 요일에 일정 추가", use_container_width=True, type="primary"):
+            if not ev_name.strip():
+                st.warning("일정 이름(예: 학교, 수학학원)을 입력해 주세요.")
+            elif not checked_wds:
+                st.warning("요일을 하나 이상 체크해 주세요.")
+            else:
+                err = add_fixed_event_visual(ev_name.strip(), checked_wds, ev_start, ev_end)
+                if err:
+                    st.warning(err)
+                else:
+                    st.rerun()
+
+        # 등록된 고정 일정 한눈에 보기 & 개별/전체 삭제
+        all_saved_evs = []
+        for wd_i in range(7):
+            evs = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_i}", ""))
+            for ev in evs:
+                all_saved_evs.append((wd_i, ev))
+
+        if all_saved_evs:
+            st.markdown("---")
+            st.markdown("**📋 현재 등록된 고정 일정**")
+            for wd_i in range(7):
+                evs = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{wd_i}", ""))
+                if evs:
+                    joined = " · ".join(f"{to_hhmm(s)}~{to_hhmm(e)} {html.escape(t)}" for s, e, t in evs)
+                    st.markdown(f'<div class="fixed-chip-row"><b>{WEEKDAY_KR[wd_i]}</b> | {joined}</div>', unsafe_allow_html=True)
+
+            del_choice = st.selectbox(
+                "삭제할 일정 선택",
+                all_saved_evs,
+                format_func=lambda x: f"[{WEEKDAY_KR[x[0]]}] {to_hhmm(x[1][0])}~{to_hhmm(x[1][1])} {x[1][2]}",
+                key="ui_del_fix_sel"
+            )
+            dc_a, dc_b = st.columns(2)
+            with dc_a:
+                if st.button("🗑️ 선택한 일정 삭제", use_container_width=True):
+                    remove_fixed_event_visual(del_choice[0], del_choice[1])
+                    st.rerun()
+            with dc_b:
+                if st.button("🧹 전체 비우기", use_container_width=True):
+                    clear_all_fixed_schedules()
+                    st.rerun()
 
 with t2:
     with st.expander("⚡ 시험 전까지 전체 할 일 → 주간·일간·시간표 자동 배분", expanded=False):
@@ -875,7 +949,7 @@ with d_left:
 
     range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
     wake_min, sleep_min = parse_range(range_str)
-    start_h, end_h = max(0, wake_min // 60), min(24, (sleep_min + 59) // 60)
+    start_h, end_h = max(0, wake_min // 60), min(30, (sleep_min + 59) // 60)
     fixed_events = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{sel_day.weekday()}", ""))
     free_hours = get_free_hours(sel_day.weekday(), range_str)
     day_grid = load_day_grid(sel_key)
@@ -884,10 +958,11 @@ with d_left:
         h_s, h_e = h * 60, (h + 1) * 60
         fixed_hit = next((title for s, e, title in fixed_events if s < h_e and e > h_s), None)
         assigned = day_grid.get(str(h))
+        disp_h = h % 24
 
         c_time, c_box, c_up, c_dn, c_act = st.columns([1.05, 3.85, 0.55, 0.55, 0.85], gap="small")
         with c_time:
-            st.markdown(f'<div class="hour-lbl">{h:02d}:00</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="hour-lbl">{disp_h:02d}:00</div>', unsafe_allow_html=True)
         with c_box:
             if fixed_hit:
                 st.markdown(f'<div class="slot-box slot-fixed">{html.escape(fixed_hit)}</div>', unsafe_allow_html=True)

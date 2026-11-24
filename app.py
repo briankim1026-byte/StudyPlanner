@@ -91,15 +91,15 @@ footer { visibility: hidden; }
 .fixed-chip-row { font-size: .78rem; padding: 5px 9px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 4px; color: #334155; word-break: break-word; }
 .detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
 .detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
-.hour-lbl { font-size: .78rem; font-weight: 800; color: #64748b; padding-top: 9px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.slot-box { border-radius: 11px; padding: 8px 12px; font-size: .84rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; word-break: break-word; }
+.hour-lbl { font-size: .8rem; font-weight: 800; color: #64748b; padding-top: 9px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.slot-box { border-radius: 11px; padding: 8px 13px; font-size: .85rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; word-break: break-word; }
 .slot-empty { background: #fff; border: 1.5px dashed #cbd5e1; color: #94a3b8; font-weight: 500; }
 .slot-fixed { background: #f1f5f9; border-left: 4px solid #94a3b8; color: #475569; }
 .st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
 .st-card-title { font-size: 1.02rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
 .st-card-total { font-size: .9rem; font-weight: 700; color: #475569; }
 
-/* 반응형 한달 달력 CSS Grid (PC·아이폰 모두 7열 완벽 유지) */
+/* 반응형 한달 달력 CSS Grid */
 .mcal-wrap { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 12px 10px; box-shadow: 0 6px 20px rgba(15,23,42,.04); margin-bottom: 10px; }
 .mcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .mcal-hdr { text-align: center; font-weight: 800; font-size: .82rem; padding: 4px 0 6px 0; }
@@ -112,13 +112,13 @@ footer { visibility: hidden; }
 
 .stTextArea textarea, .stTextInput input { font-size: 16px !important; line-height: 1.55 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
 .stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
-.stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .78rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .35rem .5rem !important; }
+.stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .8rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .4rem .55rem !important; }
 .stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
 .stButton > button[kind="primary"] { background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important; color: #fff !important; border: none !important; box-shadow: 0 4px 12px rgba(79,70,229,.28) !important; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
 [data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
 [data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
-.tt-row-marker { display: none; height: 0; margin: 0; padding: 0; }
+.tt-row-marker, .mob-pair-marker { display: none; height: 0; margin: 0; padding: 0; }
 
 /* 모바일(아이폰) 화면 최적화 */
 @media (max-width: 768px) {
@@ -137,44 +137,48 @@ footer { visibility: hidden; }
     .week-card { min-height: auto; padding: 10px 11px; border-radius: 14px; }
     .detail-banner { padding: 11px 14px; border-radius: 14px; }
     .detail-banner span:first-child { font-size: .92rem !important; }
-    .hour-lbl { font-size: .68rem; padding-top: 0; text-align: left; }
-    .slot-box { padding: 6px 8px; font-size: .76rem; min-height: 34px; margin-bottom: 0; border-radius: 9px; }
+    .hour-lbl { font-size: .72rem; padding-top: 0; text-align: left; }
+    .slot-box { padding: 7px 10px; font-size: .8rem; min-height: 36px; margin-bottom: 0; border-radius: 10px; }
 
-    /* 타임테이블 행: 아이폰에서도 1줄 가로 정렬 유지 */
+    /* 순서 이동 패널의 2열 버튼 가로 유지 (터치 영역 확보) */
+    .stElementContainer:has(.mob-pair-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
+    .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 6px !important;
+        align-items: center !important;
+    }
+    .stElementContainer:has(.mob-pair-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div,
+    .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"] > div {
+        width: calc(50% - 3px) !important;
+        min-width: 0 !important;
+        flex: 1 1 0% !important;
+    }
+    .stElementContainer:has(.mob-pair-marker) + .stElementContainer .stButton > button,
+    .element-container:has(.mob-pair-marker) + .element-container .stButton > button {
+        min-height: 40px !important;
+        font-size: .82rem !important;
+    }
+
+    /* 타임테이블 행: 화살표를 빼고 시간 + 넓은 일정 카드만 1줄로 깔끔하게 표시 */
     .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
     .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
-        gap: 4px !important;
+        gap: 6px !important;
         align-items: center !important;
-        margin-bottom: 4px !important;
+        margin-bottom: 5px !important;
     }
     .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(1),
     .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(1) {
-        width: 66px !important;
-        min-width: 66px !important;
-        max-width: 66px !important;
-        flex: 0 0 66px !important;
+        width: 74px !important;
+        min-width: 74px !important;
+        max-width: 74px !important;
+        flex: 0 0 74px !important;
     }
     .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(2),
     .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(2) {
         width: auto !important;
         min-width: 0 !important;
         flex: 1 1 auto !important;
-    }
-    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(3),
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(3),
-    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(4),
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(4) {
-        width: 32px !important;
-        min-width: 32px !important;
-        max-width: 32px !important;
-        flex: 0 0 32px !important;
-    }
-    .stElementContainer:has(.tt-row-marker) + .stElementContainer .stButton > button,
-    .element-container:has(.tt-row-marker) + .element-container .stButton > button {
-        padding: 0.2rem 0 !important;
-        min-height: 32px !important;
-        font-size: 0.72rem !important;
     }
 
     /* 아이폰 한달 달력 컴팩트 최적화 */
@@ -276,6 +280,9 @@ def fmt_hour_label(h: int) -> str:
     if h == 24:
         return "24:00 (자정)"
     return f"새벽 {h - 24:02d}:00"
+
+def fmt_slot_range(h: int) -> str:
+    return f"{h % 24:02d}:00~{(h + 1) % 24:02d}:00"
 
 def parse_range(range_str: str, default=(420, 1440)):
     m = re.search(rf"{TIME_PAT}\s*[-~]\s*{TIME_PAT}", (range_str or "").strip())
@@ -832,24 +839,43 @@ def render_week_task_chips(dk: str) -> str:
         chips.append(f'<div class="sch-item" style="background:{bg}; border-left:3px solid {bd}; color:{fg}; {deco}">{mark}{html.escape(t)}</div>')
     return "".join(chips)
 
-def move_hour_slot(dk: str, hour: int, direction: int, free_hours):
-    if hour not in free_hours:
+# 일정 블록 단위 시간 이동 / 순서 스왑 (1시간 및 연강 블록 지원)
+def move_task_block(dk: str, target_task: str, free_hours, new_start_h=None, step_dir: int = 0):
+    if not free_hours:
         return
-    idx = free_hours.index(hour)
-    target_idx = idx + direction
-    if not (0 <= target_idx < len(free_hours)):
-        return
-    target_h = free_hours[target_idx]
     grid = load_day_grid(dk)
-    h1, h2 = str(hour), str(target_h)
-    v1, v2 = grid.get(h1), grid.get(h2)
-    if v1 is None:
+    cur_indices = [i for i, h in enumerate(free_hours) if grid.get(str(h)) == target_task]
+    if not cur_indices:
         return
-    grid[h2] = v1
-    if v2 is not None:
-        grid[h1] = v2
+    k = len(cur_indices)
+
+    if step_dir != 0:
+        if step_dir < 0 and cur_indices[0] == 0:
+            return
+        if step_dir > 0 and cur_indices[-1] >= len(free_hours) - 1:
+            return
+        start_idx = cur_indices[0] + step_dir
+    elif new_start_h is not None and new_start_h in free_hours:
+        start_idx = free_hours.index(new_start_h)
     else:
-        grid.pop(h1, None)
+        return
+
+    start_idx = max(0, min(start_idx, len(free_hours) - k))
+    target_hours = free_hours[start_idx : start_idx + k]
+    old_hours = [free_hours[i] for i in cur_indices]
+    if target_hours == old_hours:
+        return
+
+    displaced = [grid[str(h)] for h in target_hours if str(h) in grid and grid[str(h)] != target_task]
+    vacated = [h for h in old_hours if h not in target_hours]
+
+    for h in old_hours + target_hours:
+        grid.pop(str(h), None)
+    for h in target_hours:
+        grid[str(h)] = target_task
+    for h, val in zip(vacated, displaced):
+        grid[str(h)] = val
+
     st.session_state[f"memo_grid_{dk}"] = json.dumps(grid, ensure_ascii=False)
     save_day(f"grid_{dk}")
 
@@ -880,7 +906,7 @@ today = get_kst_today()
 if "selected_day" not in st.session_state:
     st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
 
-# 사이드바 (집중 타이머에 재개 버튼 포함)
+# 사이드바
 with st.sidebar:
     uc1, uc2 = st.columns([2.2, 1])
     with uc1:
@@ -1182,6 +1208,7 @@ with d_left:
     color_map = {t: TASK_COLORS[idx % len(TASK_COLORS)] for idx, t in enumerate(day_tasks)}
     range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
 
+    # 1) 오늘 할 일 완료 체크 & 미완료 항목 다음날 이월
     with st.container(border=True):
         st.markdown(f"""
             <div class="st-card-hdr" style="margin-bottom:8px;">
@@ -1215,6 +1242,75 @@ with d_left:
     free_hours = get_free_hours(sel_day.weekday(), range_str)
     day_grid = load_day_grid(sel_key)
 
+    # 현재 배치된 일정 블록 목록 (시간순 정렬)
+    placed_blocks = []
+    seen_labels = set()
+    for h in free_hours:
+        val = day_grid.get(str(h))
+        if val and val not in seen_labels:
+            seen_labels.add(val)
+            hrs_of_val = [hh for hh in free_hours if day_grid.get(str(hh)) == val]
+            placed_blocks.append((val, hrs_of_val))
+
+    # 2) 모바일 엄지 터치용 시간표 순서 · 시간 이동 패널 (일정이 2개 이상이거나 빈 시간이 있을 때 표시)
+    if placed_blocks and len(free_hours) > 1:
+        with st.container(border=True):
+            st.markdown('<div class="st-card-hdr" style="margin-bottom:8px;"><span class="st-card-title">🔀 시간표 순서 · 시간 바꾸기</span></div>', unsafe_allow_html=True)
+
+            def fmt_placed_opt(item):
+                lbl, hrs_list = item
+                dot = color_map.get(lbl, ("", "", "", "📌"))[3]
+                clean_nm, _ = extract_task_hours(lbl)
+                t_span = f"{hrs_list[0]%24:02d}:00~{(hrs_list[-1]+1)%24:02d}:00"
+                return f"{dot} {clean_nm} ({t_span})"
+
+            sel_block = st.selectbox(
+                "순서나 시간을 바꿀 일정",
+                placed_blocks,
+                format_func=fmt_placed_opt,
+                key=f"mv_blk_{sel_key}"
+            )
+            chosen_lbl, chosen_hrs = sel_block
+            can_up = free_hours.index(chosen_hrs[0]) > 0
+            can_dn = free_hours.index(chosen_hrs[-1]) < len(free_hours) - 1
+
+            st.markdown('<div class="mob-pair-marker"></div>', unsafe_allow_html=True)
+            mv_c1, mv_c2 = st.columns(2, gap="small")
+            with mv_c1:
+                if st.button("⬆️ 더 이른 시간으로", use_container_width=True, disabled=(not can_up), key=f"mv_up_{sel_key}"):
+                    move_task_block(sel_key, chosen_lbl, free_hours, step_dir=-1)
+                    st.rerun()
+            with mv_c2:
+                if st.button("⬇️ 더 늦은 시간으로", use_container_width=True, disabled=(not can_dn), key=f"mv_dn_{sel_key}"):
+                    move_task_block(sel_key, chosen_lbl, free_hours, step_dir=1)
+                    st.rerun()
+
+            # 원하는 시간대로 1번에 점프 이동
+            k_len = len(chosen_hrs)
+            valid_starts = free_hours[: max(1, len(free_hours) - k_len + 1)]
+            cur_start = chosen_hrs[0] if chosen_hrs[0] in valid_starts else valid_starts[0]
+
+            def fmt_target_time(sh: int):
+                eh = (sh + k_len) % 24
+                return f"{sh%24:02d}:00 시작 ({sh%24:02d}:00~{eh:02d}:00)"
+
+            st.markdown('<div class="mob-pair-marker"></div>', unsafe_allow_html=True)
+            jp_c1, jp_c2 = st.columns([2, 1], gap="small")
+            with jp_c1:
+                target_sh = st.selectbox(
+                    "바로 옮길 시간",
+                    valid_starts,
+                    index=valid_starts.index(cur_start),
+                    format_func=fmt_target_time,
+                    label_visibility="collapsed",
+                    key=f"jp_sel_{sel_key}_{chosen_lbl}"
+                )
+            with jp_c2:
+                if st.button("✨ 이동", use_container_width=True, type="primary", disabled=(target_sh == chosen_hrs[0]), key=f"jp_btn_{sel_key}"):
+                    move_task_block(sel_key, chosen_lbl, free_hours, new_start_h=target_sh)
+                    st.rerun()
+
+    # 3) 깔끔한 1시간 단위 타임테이블 (좁은 화살표 버튼 제거)
     slot_totals = {}
     for h in range(start_h, end_h):
         val = day_grid.get(str(h))
@@ -1226,13 +1322,11 @@ with d_left:
         h_s, h_e = h * 60, (h + 1) * 60
         overlapping = [(s, e, title) for s, e, title in fixed_events if s < h_e and e > h_s]
         assigned = day_grid.get(str(h))
-        disp_s = h % 24
-        disp_e = (h + 1) % 24
 
         st.markdown('<div class="tt-row-marker"></div>', unsafe_allow_html=True)
-        c_time, c_box, c_up, c_dn = st.columns([1.45, 4.15, 0.55, 0.55], gap="small")
+        c_time, c_box = st.columns([1.35, 4.65], gap="small")
         with c_time:
-            st.markdown(f'<div class="hour-lbl">{disp_s:02d}:00~{disp_e:02d}:00</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="hour-lbl">{fmt_slot_range(h)}</div>', unsafe_allow_html=True)
         with c_box:
             if overlapping:
                 labels = []
@@ -1257,12 +1351,6 @@ with d_left:
                 st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{dot} {html.escape(disp_lbl)}</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="slot-box slot-empty"></div>', unsafe_allow_html=True)
-        with c_up:
-            if not overlapping and assigned:
-                st.button("▲", key=f"up_{sel_key}_{h}", use_container_width=True, disabled=(h == free_hours[0] if free_hours else True), on_click=move_hour_slot, args=(sel_key, h, -1, free_hours))
-        with c_dn:
-            if not overlapping and assigned:
-                st.button("▼", key=f"dn_{sel_key}_{h}", use_container_width=True, disabled=(h == free_hours[-1] if free_hours else True), on_click=move_hour_slot, args=(sel_key, h, 1, free_hours))
 
     st.write("")
     with st.expander("✏️ 오늘 할 일 목록 직접 수정 & 자동 재정렬", expanded=False):
@@ -1334,7 +1422,7 @@ with d_right:
                 save_day(sel_key)
                 st.rerun()
 
-# 한눈에 보는 전체 달력 (PC·아이폰 전용 7열 CSS Grid + 날짜 바로 이동)
+# 한눈에 보는 한달 달력
 st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력</div>', unsafe_allow_html=True)
 
 cal_cells = []
@@ -1373,7 +1461,6 @@ for week in WEEKS:
 
 st.markdown(f'<div class="mcal-wrap"><div class="mcal-grid">{"".join(cal_cells)}</div></div>', unsafe_allow_html=True)
 
-# 달력 아래 날짜 바로 이동 컨트롤 (아이폰 엄지 터치 최적화)
 nav1, nav2, nav3, nav4 = st.columns([1, 2.3, 1, 1.1], gap="small")
 with nav1:
     if st.button("◀ 이전 날", use_container_width=True, disabled=(sel_day <= START_DATE)):

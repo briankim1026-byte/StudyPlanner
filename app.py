@@ -82,7 +82,7 @@ footer { visibility: hidden; }
 .fixed-chip-row { font-size: .78rem; padding: 5px 9px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 4px; color: #334155; }
 .detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; }
 .detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
-.hour-lbl { font-size: .82rem; font-weight: 800; color: #64748b; padding-top: 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.hour-lbl { font-size: .78rem; font-weight: 800; color: #64748b; padding-top: 9px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .slot-box { border-radius: 11px; padding: 8px 12px; font-size: .84rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; }
 .slot-empty { background: #fff; border: 1.5px dashed #cbd5e1; color: #94a3b8; font-weight: 500; }
 .slot-fixed { background: #f1f5f9; border-left: 4px solid #94a3b8; color: #475569; }
@@ -1014,29 +1014,36 @@ with d_left:
 
     for h in range(start_h, end_h):
         h_s, h_e = h * 60, (h + 1) * 60
-        fixed_hit = next((title for s, e, title in fixed_events if s < h_e and e > h_s), None)
+        overlapping = [(s, e, title) for s, e, title in fixed_events if s < h_e and e > h_s]
         assigned = day_grid.get(str(h))
-        disp_h = h % 24
+        disp_s = h % 24
+        disp_e = (h + 1) % 24
 
-        c_time, c_box, c_up, c_dn, c_act = st.columns([1.05, 3.85, 0.55, 0.55, 0.85], gap="small")
+        c_time, c_box, c_up, c_dn, c_act = st.columns([1.45, 3.55, 0.52, 0.52, 0.82], gap="small")
         with c_time:
-            st.markdown(f'<div class="hour-lbl">{disp_h:02d}:00</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="hour-lbl">{disp_s:02d}:00~{disp_e:02d}:00</div>', unsafe_allow_html=True)
         with c_box:
-            if fixed_hit:
-                st.markdown(f'<div class="slot-box slot-fixed">{html.escape(fixed_hit)}</div>', unsafe_allow_html=True)
+            if overlapping:
+                labels = []
+                for s, e, title in overlapping:
+                    if s > h_s or e < h_e:
+                        labels.append(f"{title} ({to_hhmm(s)}~{to_hhmm(e)})")
+                    else:
+                        labels.append(title)
+                st.markdown(f'<div class="slot-box slot-fixed">{html.escape(" · ".join(labels))}</div>', unsafe_allow_html=True)
             elif assigned:
                 bg, bd, fg, dot = color_map.get(assigned, ("#f8fafc", "#64748b", "#1e293b", "📌"))
                 st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{dot} {html.escape(assigned)}</div>', unsafe_allow_html=True)
             else:
                 st.markdown('<div class="slot-box slot-empty"></div>', unsafe_allow_html=True)
         with c_up:
-            if not fixed_hit and assigned:
+            if not overlapping and assigned:
                 st.button("▲", key=f"up_{sel_key}_{h}", use_container_width=True, disabled=(h == free_hours[0] if free_hours else True), on_click=move_hour_slot, args=(sel_key, h, -1, free_hours))
         with c_dn:
-            if not fixed_hit and assigned:
+            if not overlapping and assigned:
                 st.button("▼", key=f"dn_{sel_key}_{h}", use_container_width=True, disabled=(h == free_hours[-1] if free_hours else True), on_click=move_hour_slot, args=(sel_key, h, 1, free_hours))
         with c_act:
-            if fixed_hit:
+            if overlapping:
                 st.button("고정", key=f"slot_{sel_key}_{h}", use_container_width=True, disabled=True)
             else:
                 btn_txt = "✕" if (assigned and (selected_brush == "__ERASE__" or assigned == selected_brush)) else "선택"

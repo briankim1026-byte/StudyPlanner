@@ -99,17 +99,6 @@ footer { visibility: hidden; }
 .st-card-title { font-size: 1.02rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
 .st-card-total { font-size: .9rem; font-weight: 700; color: #475569; }
 
-/* 반응형 한달 달력 CSS Grid */
-.mcal-wrap { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 12px 10px; box-shadow: 0 6px 20px rgba(15,23,42,.04); margin-bottom: 10px; }
-.mcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
-.mcal-hdr { text-align: center; font-weight: 800; font-size: .82rem; padding: 4px 0 6px 0; }
-.mcal-cell { border-radius: 12px; padding: 7px 6px; min-height: 74px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; overflow: hidden; }
-.mcal-empty { background: transparent; border: none; min-height: 40px; }
-.mcal-top { display: flex; justify-content: space-between; align-items: center; gap: 2px; font-weight: 800; font-size: .82rem; }
-.mcal-today-tag { font-size: .58rem; font-weight: 900; background: #f59e0b; color: #fff; padding: 1px 4px; border-radius: 999px; }
-.mcal-cnt { font-size: .7rem; font-weight: 700; color: #4f46e5; background: rgba(99,102,241,.1); padding: 1px 5px; border-radius: 6px; display: inline-block; width: fit-content; margin-top: 3px; }
-.mcal-prev { font-size: .68rem; color: #64748b; line-height: 1.25; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
 .stTextArea textarea, .stTextInput input { font-size: 16px !important; line-height: 1.55 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
 .stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
 .stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .8rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .4rem .55rem !important; }
@@ -118,7 +107,48 @@ footer { visibility: hidden; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
 [data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
 [data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
-.tt-row-marker, .mob-pair-marker { display: none; height: 0; margin: 0; padding: 0; }
+.tt-row-marker, .mob-pair-marker, .mcal-row-marker { display: none; height: 0; margin: 0; padding: 0; }
+
+/* 터치형 한달 달력 7열 그리드 (PC·아이폰 공통) */
+.stElementContainer:has(.mcal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
+.element-container:has(.mcal-row-marker) + .element-container [data-testid="stHorizontalBlock"],
+.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] {
+    flex-wrap: nowrap !important;
+    gap: 5px !important;
+    margin-bottom: 5px !important;
+}
+.stElementContainer:has(.mcal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div,
+.element-container:has(.mcal-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div,
+.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] > div {
+    width: calc(14.28% - 4px) !important;
+    min-width: 0 !important;
+    flex: 1 1 0% !important;
+}
+.stElementContainer:has(.mcal-row-marker) + .stElementContainer .stButton > button,
+.element-container:has(.mcal-row-marker) + .element-container .stButton > button,
+.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] .stButton > button {
+    min-height: 68px !important;
+    padding: 7px 6px !important;
+    border-radius: 13px !important;
+    white-space: pre-line !important;
+    line-height: 1.35 !important;
+    font-size: .78rem !important;
+    text-align: left !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    box-shadow: 0 3px 10px rgba(15,23,42,.03) !important;
+}
+.stElementContainer:has(.mcal-row-marker) + .stElementContainer .stButton > button p,
+.element-container:has(.mcal-row-marker) + .element-container .stButton > button p,
+.stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] .stButton > button p {
+    white-space: pre-line !important;
+    text-align: left !important;
+    margin: 0 !important;
+    width: 100% !important;
+    word-break: keep-all !important;
+}
 
 /* 모바일(아이폰) 화면 최적화 */
 @media (max-width: 768px) {
@@ -140,56 +170,68 @@ footer { visibility: hidden; }
     .hour-lbl { font-size: .72rem; padding-top: 0; text-align: left; }
     .slot-box { padding: 7px 10px; font-size: .8rem; min-height: 36px; margin-bottom: 0; border-radius: 10px; }
 
-    /* 순서 이동 패널의 2열 버튼 가로 유지 (터치 영역 확보) */
+    /* 2~3열 보조 버튼 가로 유지 */
     .stElementContainer:has(.mob-pair-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
-    .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"] {
+    .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"],
+    .stElementContainer:has(.mob-pair-marker) + [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         gap: 6px !important;
         align-items: center !important;
     }
     .stElementContainer:has(.mob-pair-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div,
-    .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"] > div {
-        width: calc(50% - 3px) !important;
+    .element-container:has(.mob-pair-marker) + .element-container [data-testid="stHorizontalBlock"] > div,
+    .stElementContainer:has(.mob-pair-marker) + [data-testid="stHorizontalBlock"] > div {
         min-width: 0 !important;
         flex: 1 1 0% !important;
     }
     .stElementContainer:has(.mob-pair-marker) + .stElementContainer .stButton > button,
-    .element-container:has(.mob-pair-marker) + .element-container .stButton > button {
+    .element-container:has(.mob-pair-marker) + .element-container .stButton > button,
+    .stElementContainer:has(.mob-pair-marker) + [data-testid="stHorizontalBlock"] .stButton > button {
         min-height: 40px !important;
         font-size: .82rem !important;
     }
 
-    /* 타임테이블 행: 화살표를 빼고 시간 + 넓은 일정 카드만 1줄로 깔끔하게 표시 */
+    /* 타임테이블 행: 시간 + 넓은 일정 카드 1줄 유지 */
     .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] {
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"],
+    .stElementContainer:has(.tt-row-marker) + [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
         gap: 6px !important;
         align-items: center !important;
         margin-bottom: 5px !important;
     }
     .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(1),
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(1) {
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(1),
+    .stElementContainer:has(.tt-row-marker) + [data-testid="stHorizontalBlock"] > div:nth-child(1) {
         width: 74px !important;
         min-width: 74px !important;
         max-width: 74px !important;
         flex: 0 0 74px !important;
     }
     .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(2),
-    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(2) {
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(2),
+    .stElementContainer:has(.tt-row-marker) + [data-testid="stHorizontalBlock"] > div:nth-child(2) {
         width: auto !important;
         min-width: 0 !important;
         flex: 1 1 auto !important;
     }
 
-    /* 아이폰 한달 달력 컴팩트 최적화 */
-    .mcal-wrap { padding: 8px 6px; border-radius: 14px; }
-    .mcal-grid { gap: 3px; }
-    .mcal-hdr { font-size: .74rem; padding-bottom: 4px; }
-    .mcal-cell { padding: 5px 3px; min-height: 54px; border-radius: 9px; }
-    .mcal-top { font-size: .68rem; flex-direction: column; align-items: flex-start; gap: 1px; }
-    .mcal-today-tag { font-size: .52rem; padding: 0 3px; }
-    .mcal-cnt { font-size: .6rem; padding: 0 4px; margin-top: 2px; }
-    .mcal-prev { display: none; }
+    /* 아이폰 터치형 한달 달력 컴팩트 최적화 */
+    .stElementContainer:has(.mcal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
+    .element-container:has(.mcal-row-marker) + .element-container [data-testid="stHorizontalBlock"],
+    .stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] {
+        gap: 3px !important;
+        margin-bottom: 3px !important;
+    }
+    .stElementContainer:has(.mcal-row-marker) + .stElementContainer .stButton > button,
+    .element-container:has(.mcal-row-marker) + .element-container .stButton > button,
+    .stElementContainer:has(.mcal-row-marker) + [data-testid="stHorizontalBlock"] .stButton > button {
+        min-height: 54px !important;
+        padding: 4px 3px !important;
+        border-radius: 9px !important;
+        font-size: .66rem !important;
+        line-height: 1.25 !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -263,8 +305,10 @@ def save_sleep_cond(sel_key):
     st.session_state[f"memo_{sk}"] = json.dumps(data, ensure_ascii=False)
     save_day(sk)
 
-def select_day(target_date):
+def select_day(target_date, do_scroll: bool = False):
     st.session_state["selected_day"] = target_date
+    if do_scroll:
+        st.session_state["scroll_to_detail"] = True
 
 TIME_PAT = r"(\d{1,2})\s*(?::\s*(\d{2})|시(?:\s*(\d{1,2})\s*분?)?)"
 
@@ -839,7 +883,6 @@ def render_week_task_chips(dk: str) -> str:
         chips.append(f'<div class="sch-item" style="background:{bg}; border-left:3px solid {bd}; color:{fg}; {deco}">{mark}{html.escape(t)}</div>')
     return "".join(chips)
 
-# 일정 블록 단위 시간 이동 / 순서 스왑 (1시간 및 연강 블록 지원)
 def move_task_block(dk: str, target_task: str, free_hours, new_start_h=None, step_dir: int = 0):
     if not free_hours:
         return
@@ -1182,9 +1225,12 @@ for i, day in enumerate(active_week):
                     <div>{render_week_task_chips(dk)}</div>
                 </div>
             """, unsafe_allow_html=True)
-            st.button("선택됨" if day == sel_day else "상세 보기", key=f"wk_btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
+            st.button("선택됨" if day == sel_day else "상세 보기", key=f"wk_btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day, True))
         else:
             st.write("")
+
+# 달력에서 날짜 클릭 시 이동할 목적지 앵커
+st.markdown('<div id="daily-timetable-anchor" style="scroll-margin-top: 14px;"></div>', unsafe_allow_html=True)
 
 sel_key = sel_day.strftime('%Y_%m_%d')
 sel_wd = WEEKDAY_KR[sel_day.weekday()]
@@ -1208,7 +1254,6 @@ with d_left:
     color_map = {t: TASK_COLORS[idx % len(TASK_COLORS)] for idx, t in enumerate(day_tasks)}
     range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
 
-    # 1) 오늘 할 일 완료 체크 & 미완료 항목 다음날 이월
     with st.container(border=True):
         st.markdown(f"""
             <div class="st-card-hdr" style="margin-bottom:8px;">
@@ -1242,7 +1287,6 @@ with d_left:
     free_hours = get_free_hours(sel_day.weekday(), range_str)
     day_grid = load_day_grid(sel_key)
 
-    # 현재 배치된 일정 블록 목록 (시간순 정렬)
     placed_blocks = []
     seen_labels = set()
     for h in free_hours:
@@ -1252,7 +1296,6 @@ with d_left:
             hrs_of_val = [hh for hh in free_hours if day_grid.get(str(hh)) == val]
             placed_blocks.append((val, hrs_of_val))
 
-    # 2) 모바일 엄지 터치용 시간표 순서 · 시간 이동 패널 (일정이 2개 이상이거나 빈 시간이 있을 때 표시)
     if placed_blocks and len(free_hours) > 1:
         with st.container(border=True):
             st.markdown('<div class="st-card-hdr" style="margin-bottom:8px;"><span class="st-card-title">🔀 시간표 순서 · 시간 바꾸기</span></div>', unsafe_allow_html=True)
@@ -1285,7 +1328,6 @@ with d_left:
                     move_task_block(sel_key, chosen_lbl, free_hours, step_dir=1)
                     st.rerun()
 
-            # 원하는 시간대로 1번에 점프 이동
             k_len = len(chosen_hrs)
             valid_starts = free_hours[: max(1, len(free_hours) - k_len + 1)]
             cur_start = chosen_hrs[0] if chosen_hrs[0] in valid_starts else valid_starts[0]
@@ -1310,7 +1352,6 @@ with d_left:
                     move_task_block(sel_key, chosen_lbl, free_hours, new_start_h=target_sh)
                     st.rerun()
 
-    # 3) 깔끔한 1시간 단위 타임테이블 (좁은 화살표 버튼 제거)
     slot_totals = {}
     for h in range(start_h, end_h):
         val = day_grid.get(str(h))
@@ -1422,66 +1463,65 @@ with d_right:
                 save_day(sel_key)
                 st.rerun()
 
-# 한눈에 보는 한달 달력
-st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력</div>', unsafe_allow_html=True)
+# 한눈에 보는 한달 달력 (날짜 칸 직접 터치 -> 해당 날짜 선택 + 시간표로 부드러운 자동 스크롤)
+st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력 <span style="font-size:.76rem; font-weight:600; color:#64748b;">(날짜 터치 시 바로 이동)</span></div>', unsafe_allow_html=True)
 
-cal_cells = []
+st.markdown('<div class="mcal-row-marker"></div>', unsafe_allow_html=True)
+hdr_cols = st.columns(7, gap="small")
 for i, day_name in enumerate(WEEKDAY_KR):
     color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#64748b"
-    cal_cells.append(f'<div class="mcal-hdr" style="color:{color};">{day_name}</div>')
+    hdr_cols[i].markdown(f"<div style='text-align:center; font-weight:800; font-size:.82rem; color:{color}; padding-bottom:4px;'>{day_name}</div>", unsafe_allow_html=True)
 
 for week in WEEKS:
+    st.markdown('<div class="mcal-row-marker"></div>', unsafe_allow_html=True)
+    w_cal_cols = st.columns(7, gap="small")
     for i, day in enumerate(week):
-        if day is not None:
-            dk = day.strftime('%Y_%m_%d')
-            day_t_list = get_day_task_list(dk)
-            is_done = st.session_state.get(f"chk_{dk}", False)
-            has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
-            if day == sel_day:
-                bg, border = "#eef2ff", "2px solid #4f46e5"
-            elif is_done:
-                bg, border = "#ecfdf5", "1.5px solid #6ee7b7"
-            elif day == today:
-                bg, border = "#fffbeb", "2px solid #f59e0b"
+        with w_cal_cols[i]:
+            if day is not None:
+                dk = day.strftime('%Y_%m_%d')
+                day_t_list = get_day_task_list(dk)
+                is_done = st.session_state.get(f"chk_{dk}", False)
+                has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
+
+                top_line = f"{day.month}/{day.day}" + (" 🔥" if day == today else "")
+                icons = ("✅" if is_done else "") + ("📸" if has_photo else "")
+                cnt_txt = f"{len(day_t_list)}개" if day_t_list else "-"
+                bot_line = f"{icons} {cnt_txt}".strip()
+                cell_label = f"{top_line}\n{bot_line}"
+
+                st.button(
+                    cell_label,
+                    key=f"mcal_cell_btn_{dk}",
+                    type=("primary" if day == sel_day else "secondary"),
+                    use_container_width=True,
+                    on_click=select_day,
+                    args=(day, True)
+                )
             else:
-                bg, border = "#ffffff", "1px solid #e2e8f0"
-            day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
-            today_tag = '<span class="mcal-today-tag">TODAY</span>' if day == today else ""
-            icons = ("✅" if is_done else "") + ("📸" if has_photo else "")
-            cnt_badge = f'<span class="mcal-cnt">{len(day_t_list)}개</span>' if day_t_list else ""
-            prev_txt = html.escape(day_t_list[0]) if day_t_list else ""
-            cal_cells.append(
-                f'<div class="mcal-cell" style="background:{bg}; border:{border};">'
-                f'<div class="mcal-top" style="color:{day_color};"><span>{day.month}/{day.day} {today_tag}</span><span>{icons}</span></div>'
-                f'<div>{cnt_badge}<div class="mcal-prev">{prev_txt}</div></div>'
-                f'</div>'
-            )
-        else:
-            cal_cells.append('<div class="mcal-empty"></div>')
+                st.write("")
 
-st.markdown(f'<div class="mcal-wrap"><div class="mcal-grid">{"".join(cal_cells)}</div></div>', unsafe_allow_html=True)
-
-nav1, nav2, nav3, nav4 = st.columns([1, 2.3, 1, 1.1], gap="small")
+st.markdown('<div class="mob-pair-marker"></div>', unsafe_allow_html=True)
+nav1, nav2, nav3 = st.columns(3, gap="small")
 with nav1:
-    if st.button("◀ 이전 날", use_container_width=True, disabled=(sel_day <= START_DATE)):
-        select_day(sel_day - timedelta(days=1))
-        st.rerun()
+    st.button("◀ 이전 날", use_container_width=True, disabled=(sel_day <= START_DATE), on_click=select_day, args=(sel_day - timedelta(days=1), True), key="nav_prev_btn")
 with nav2:
-    def fmt_date_opt(d: date):
-        t_cnt = len(get_day_task_list(d.strftime('%Y_%m_%d')))
-        t_mark = " [TODAY]" if d == today else ""
-        return f"{d.month}/{d.day} ({WEEKDAY_KR[d.weekday()]}){t_mark} · 할일 {t_cnt}개"
-    jump_day = st.selectbox("날짜 바로 이동", VALID_DATES, index=VALID_DATES.index(sel_day), format_func=fmt_date_opt, label_visibility="collapsed")
-    if jump_day != sel_day:
-        select_day(jump_day)
-        st.rerun()
-with nav3:
-    if st.button("다음 날 ▶", use_container_width=True, disabled=(sel_day >= END_DATE)):
-        select_day(sel_day + timedelta(days=1))
-        st.rerun()
-with nav4:
     today_target = today if START_DATE <= today <= END_DATE else START_DATE
-    if st.button("📍 오늘로", use_container_width=True, disabled=(sel_day == today_target)):
-        select_day(today_target)
-        st.rerun()
+    st.button("📍 오늘로", use_container_width=True, on_click=select_day, args=(today_target, True), key="nav_today_btn")
+with nav3:
+    st.button("다음 날 ▶", use_container_width=True, disabled=(sel_day >= END_DATE), on_click=select_day, args=(sel_day + timedelta(days=1), True), key="nav_next_btn")
+
+# 달력 날짜 클릭 시 하루 시간표 위치로 부드럽게 스크롤
+if st.session_state.pop("scroll_to_detail", False):
+    components.html("""
+        <script>
+            setTimeout(function() {
+                try {
+                    const el = window.parent.document.getElementById('daily-timetable-anchor');
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                } catch (e) {}
+            }, 150);
+        </script>
+    """, height=0)
 # 끝

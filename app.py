@@ -7,7 +7,7 @@ import streamlit.components.v1 as components
 from datetime import date, timedelta
 from supabase import create_client, Client
 
-st.set_page_config(page_title="프리미엄 스터디 플래너", page_icon="✨", layout="wide")
+st.set_page_config(page_title="라이프 & 스터디 플래너", page_icon="✨", layout="wide")
 
 @st.cache_resource
 def init_supabase() -> Client:
@@ -20,7 +20,13 @@ END_DATE = date(2026, 12, 23)
 TOTAL_DAYS = (END_DATE - START_DATE).days + 1
 VALID_DATES = [START_DATE + timedelta(days=i) for i in range(TOTAL_DAYS)]
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
-DINNER_LABEL = "🍽️ 저녁 식사"
+CONDITIONS = ["😊 좋음", "😐 보통", "😫 피곤"]
+
+LIFE_BLOCKS = {
+    "🍽️ 저녁 식사": ("#fffbeb", "#f59e0b", "#92400e"),
+    "🏃 운동/산책": ("#ecfdf5", "#10b981", "#065f46"),
+    "🛌 휴식": ("#f0f9ff", "#0ea5e9", "#075985"),
+}
 
 TASK_COLORS = [
     ("#eef2ff", "#6366f1", "#312e81", "🟣"),
@@ -38,19 +44,125 @@ while len(all_dates_padded) % 7 != 0:
     all_dates_padded.append(None)
 WEEKS = [all_dates_padded[i:i+7] for i in range(0, len(all_dates_padded), 7)]
 
-if "db_loaded" not in st.session_state:
-    res_logs = supabase.table("daily_logs").select("*").execute()
+# 공통 CSS
+st.markdown("""
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+html, body, [class*="css"] { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important; color: #0f172a; }
+[data-testid="stDecoration"] { display: none; }
+footer { visibility: hidden; }
+.block-container { padding-top: 2rem !important; padding-bottom: 3rem !important; max-width: 1320px; }
+.stApp {
+    background-color: #f6f8fc;
+    background-image: radial-gradient(at 8% 10%, rgba(129,140,248,.14) 0px, transparent 42%),
+                      radial-gradient(at 92% 8%, rgba(56,189,248,.13) 0px, transparent 40%),
+                      radial-gradient(at 50% 95%, rgba(167,243,208,.12) 0px, transparent 45%);
+    background-attachment: fixed;
+}
+[data-testid="stSidebar"] { background: rgba(255,255,255,.85); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
+.side-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px; box-shadow: 0 6px 18px rgba(15,23,42,.04); margin-bottom: 10px; }
+.exam-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; border-radius: 10px; background: #f8fafc; margin-bottom: 6px; font-size: .8rem; }
+.exam-dday { font-size: .7rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #4f46e5; white-space: nowrap; }
+.mini-bar-bg { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 10px; }
+.mini-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10b981, #34d399); transition: width .4s ease; }
+.hero-wrap { text-align: center; margin-bottom: 20px; }
+.hero-pill { display: inline-block; padding: 5px 14px; border-radius: 999px; background: rgba(99,102,241,.1); color: #4f46e5; font-size: .78rem; font-weight: 700; letter-spacing: .04em; margin-bottom: 8px; }
+.hero-title { font-size: 2.25rem; font-weight: 900; letter-spacing: -.03em; background: linear-gradient(120deg, #1e1b4b 0%, #4f46e5 55%, #0284c7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; }
+.stat-card { background: rgba(255,255,255,.9); backdrop-filter: blur(12px); border-radius: 20px; padding: 18px 22px; box-shadow: 0 10px 28px rgba(15,23,42,.045); border: 1px solid rgba(255,255,255,.9); min-height: 102px; }
+.stat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.stat-label { font-size: .84rem; color: #64748b; font-weight: 700; }
+.stat-badge { font-size: .75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+.stat-value { font-size: 1.65rem; font-weight: 900; letter-spacing: -.02em; }
+.sec-header { display: flex; align-items: center; gap: 8px; font-size: 1.12rem; font-weight: 800; color: #1e293b; margin: 18px 0 10px 0; }
+.sec-dot { width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #4f46e5, #0ea5e9); display: inline-block; }
+[data-testid="stExpander"] { background: rgba(255,255,255,.9) !important; border: 1px solid #e2e8f0 !important; border-radius: 16px !important; box-shadow: 0 4px 14px rgba(15,23,42,.035) !important; }
+.week-card { border-radius: 18px; padding: 13px 11px; min-height: 185px; margin-bottom: 8px; box-shadow: 0 6px 18px rgba(15,23,42,.04); transition: transform .18s ease; }
+.week-card:hover { transform: translateY(-2px); }
+.week-date { font-weight: 800; font-size: .92rem; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid rgba(148,163,184,.18); display: flex; justify-content: space-between; align-items: center; }
+.today-chip { font-size: .65rem; font-weight: 800; background: #f59e0b; color: #fff; padding: 2px 6px; border-radius: 999px; margin-left: 4px; }
+.sch-item { font-size: .75rem; line-height: 1.38; padding: 5px 8px; border-radius: 8px; margin-bottom: 5px; word-break: break-word; font-weight: 600; }
+.detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; }
+.detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
+.hour-lbl { font-size: .82rem; font-weight: 800; color: #64748b; padding-top: 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.slot-box { border-radius: 11px; padding: 8px 12px; font-size: .84rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; }
+.slot-empty { background: #fff; border: 1.5px dashed #cbd5e1; color: #94a3b8; font-weight: 500; }
+.slot-fixed { background: #f1f5f9; border-left: 4px solid #94a3b8; color: #475569; }
+.st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+.st-card-title { font-size: 1.02rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
+.st-card-total { font-size: .9rem; font-weight: 700; color: #475569; }
+.st-subj-lbl { font-size: .84rem; font-weight: 700; color: #334155; margin-bottom: 4px; }
+.cal-card { border-radius: 14px; padding: 9px 10px; min-height: 76px; margin-bottom: 6px; box-shadow: 0 3px 10px rgba(15,23,42,.03); }
+.cal-date { font-weight: 800; font-size: .86rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
+.cal-preview { font-size: .72rem; color: #64748b; line-height: 1.32; word-break: break-all; }
+.stTextArea textarea, .stTextInput input { font-size: .94rem !important; line-height: 1.6 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
+.stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
+.stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .8rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .35rem .65rem !important; }
+.stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
+.stButton > button[kind="primary"] { background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important; color: #fff !important; border: none !important; box-shadow: 0 4px 12px rgba(79,70,229,.28) !important; }
+.stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
+[data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
+[data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# 1. 개인별 로그인 게이트 (이름 + 4자리 비밀번호)
+if "current_user" not in st.session_state:
+    st.markdown("""
+        <div class="hero-wrap" style="margin-top:40px;">
+            <div class="hero-pill">MENTOR · MENTEE HABIT PROJECT</div>
+            <h1 class="hero-title">라이프 & 스터디 플래너</h1>
+        </div>
+    """, unsafe_allow_html=True)
+    _, mid, _ = st.columns([1.2, 1.6, 1.2])
+    with mid:
+        with st.container(border=True):
+            st.markdown("#### 🔐 내 플래너 열기")
+            st.caption("각자 이름과 4자리 비밀번호를 입력하면 나만의 공간에 따로 저장돼요.")
+            u_name = st.text_input("이름 (또는 닉네임)", placeholder="예: 홍길동")
+            u_pin = st.text_input("비밀번호 (숫자 4자리)", type="password", max_chars=4, placeholder="예: 1234")
+            if st.button("🚀 시작하기 / 로그인", use_container_width=True, type="primary"):
+                clean_name = re.sub(r"\s+", "", u_name)
+                if not clean_name:
+                    st.error("이름을 입력해 주세요.")
+                elif len(u_pin) != 4 or not u_pin.isdigit():
+                    st.error("비밀번호는 숫자 4자리로 입력해 주세요.")
+                else:
+                    pin_key = f"u_{clean_name}__pin"
+                    res = supabase.table("daily_logs").select("*").eq("day_key", pin_key).execute()
+                    if res.data:
+                        if res.data[0].get("memo") == u_pin:
+                            st.session_state["current_user"] = clean_name
+                            st.session_state.pop("db_loaded", None)
+                            st.rerun()
+                        else:
+                            st.error("비밀번호가 일치하지 않아요. 다시 확인해 주세요!")
+                    else:
+                        supabase.table("daily_logs").upsert({"day_key": pin_key, "memo": u_pin, "is_done": False, "photo_url": ""}).execute()
+                        st.session_state["current_user"] = clean_name
+                        st.session_state.pop("db_loaded", None)
+                        st.rerun()
+    st.stop()
+
+USER = st.session_state["current_user"]
+USER_PREFIX = f"u_{USER}__"
+
+# 2. 로그인한 사용자의 데이터만 DB에서 불러오기
+if st.session_state.get("db_loaded") != USER:
+    res_logs = supabase.table("daily_logs").select("*").like("day_key", f"{USER_PREFIX}%").execute()
     for row in res_logs.data:
-        dk = row["day_key"]
+        dk = row["day_key"][len(USER_PREFIX):]
         st.session_state[f"memo_{dk}"] = row.get("memo", "")
         st.session_state[f"chk_{dk}"] = bool(row.get("is_done", False))
         st.session_state[f"photo_url_{dk}"] = row.get("photo_url", "")
+    st.session_state.setdefault("memo_fixed_range", "07:00-24:00")
     if not st.session_state.get("memo_fixed_range"):
         st.session_state["memo_fixed_range"] = "07:00-24:00"
     if not st.session_state.get("memo_study_subjects"):
-        st.session_state["memo_study_subjects"] = "국어, 수학, 영어, 탐구"
+        st.session_state["memo_study_subjects"] = "공부, 운동, 독서, 스마트폰"
+    if not st.session_state.get("memo_habit_list"):
+        st.session_state["memo_habit_list"] = "12시 전 취침, 아침 식사, 물 마시기, 운동 30분, 밤에 폰 안 보기"
     st.session_state.setdefault("memo_exam_schedule", "")
-    st.session_state["db_loaded"] = True
+    st.session_state["db_loaded"] = USER
 
 if "selected_day" not in st.session_state:
     today = date.today()
@@ -58,16 +170,20 @@ if "selected_day" not in st.session_state:
 
 def save_day(day_key):
     supabase.table("daily_logs").upsert({
-        "day_key": day_key,
+        "day_key": f"{USER_PREFIX}{day_key}",
         "memo": st.session_state.get(f"memo_{day_key}", ""),
         "is_done": bool(st.session_state.get(f"chk_{day_key}", False)),
         "photo_url": st.session_state.get(f"photo_url_{day_key}", "")
     }).execute()
 
 def get_study_subjects():
-    raw = st.session_state.get("memo_study_subjects", "국어, 수학, 영어, 탐구")
+    raw = st.session_state.get("memo_study_subjects", "공부, 운동, 독서, 스마트폰")
     subjs = [s.strip() for s in raw.split(",") if s.strip()]
-    return subjs if subjs else ["국어", "수학", "영어", "탐구"]
+    return subjs if subjs else ["공부", "운동", "독서", "스마트폰"]
+
+def get_habit_list():
+    raw = st.session_state.get("memo_habit_list", "12시 전 취침, 아침 식사, 물 마시기, 운동 30분, 밤에 폰 안 보기")
+    return [h.strip() for h in raw.split(",") if h.strip()]
 
 def save_study_time(sel_key):
     subjs = get_study_subjects()
@@ -75,6 +191,22 @@ def save_study_time(sel_key):
     st_key = f"study_time_{sel_key}"
     st.session_state[f"memo_{st_key}"] = json.dumps(data, ensure_ascii=False)
     save_day(st_key)
+
+def save_habits(sel_key):
+    checked = [h for h in get_habit_list() if st.session_state.get(f"hab_{sel_key}_{h}", False)]
+    hk = f"habits_{sel_key}"
+    st.session_state[f"memo_{hk}"] = json.dumps(checked, ensure_ascii=False)
+    save_day(hk)
+
+def save_sleep_cond(sel_key):
+    data = {
+        "wake": st.session_state.get(f"wake_{sel_key}", "07:00"),
+        "sleep": st.session_state.get(f"sleep_{sel_key}", "23:30"),
+        "cond": st.session_state.get(f"cond_{sel_key}", CONDITIONS[0]),
+    }
+    sk = f"sleep_{sel_key}"
+    st.session_state[f"memo_{sk}"] = json.dumps(data, ensure_ascii=False)
+    save_day(sk)
 
 def select_day(target_date):
     st.session_state["selected_day"] = target_date
@@ -266,72 +398,20 @@ def toggle_hour_slot(dk: str, hour: int, brush: str):
     st.session_state[f"memo_grid_{dk}"] = json.dumps(grid, ensure_ascii=False)
     save_day(f"grid_{dk}")
 
-st.markdown("""
-<style>
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-html, body, [class*="css"] { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important; color: #0f172a; }
-[data-testid="stDecoration"] { display: none; }
-footer { visibility: hidden; }
-.block-container { padding-top: 2rem !important; padding-bottom: 3rem !important; max-width: 1320px; }
-.stApp {
-    background-color: #f6f8fc;
-    background-image: radial-gradient(at 8% 10%, rgba(129,140,248,.14) 0px, transparent 42%),
-                      radial-gradient(at 92% 8%, rgba(56,189,248,.13) 0px, transparent 40%),
-                      radial-gradient(at 50% 95%, rgba(167,243,208,.12) 0px, transparent 45%);
-    background-attachment: fixed;
-}
-[data-testid="stSidebar"] { background: rgba(255,255,255,.85); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
-.side-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px; box-shadow: 0 6px 18px rgba(15,23,42,.04); margin-bottom: 10px; }
-.exam-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; border-radius: 10px; background: #f8fafc; margin-bottom: 6px; font-size: .8rem; }
-.exam-dday { font-size: .7rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #4f46e5; white-space: nowrap; }
-.mini-bar-bg { width: 100%; height: 8px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-top: 10px; }
-.mini-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #10b981, #34d399); transition: width .4s ease; }
-.hero-wrap { text-align: center; margin-bottom: 20px; }
-.hero-pill { display: inline-block; padding: 5px 14px; border-radius: 999px; background: rgba(99,102,241,.1); color: #4f46e5; font-size: .78rem; font-weight: 700; letter-spacing: .04em; margin-bottom: 8px; }
-.hero-title { font-size: 2.3rem; font-weight: 900; letter-spacing: -.03em; background: linear-gradient(120deg, #1e1b4b 0%, #4f46e5 55%, #0284c7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0; }
-.stat-card { background: rgba(255,255,255,.9); backdrop-filter: blur(12px); border-radius: 20px; padding: 18px 22px; box-shadow: 0 10px 28px rgba(15,23,42,.045); border: 1px solid rgba(255,255,255,.9); min-height: 102px; }
-.stat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.stat-label { font-size: .84rem; color: #64748b; font-weight: 700; }
-.stat-badge { font-size: .75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
-.stat-value { font-size: 1.65rem; font-weight: 900; letter-spacing: -.02em; }
-.sec-header { display: flex; align-items: center; gap: 8px; font-size: 1.12rem; font-weight: 800; color: #1e293b; margin: 18px 0 10px 0; }
-.sec-dot { width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #4f46e5, #0ea5e9); display: inline-block; }
-[data-testid="stExpander"] { background: rgba(255,255,255,.9) !important; border: 1px solid #e2e8f0 !important; border-radius: 16px !important; box-shadow: 0 4px 14px rgba(15,23,42,.035) !important; }
-.week-card { border-radius: 18px; padding: 13px 11px; min-height: 190px; margin-bottom: 8px; box-shadow: 0 6px 18px rgba(15,23,42,.04); transition: transform .18s ease; }
-.week-card:hover { transform: translateY(-2px); }
-.week-date { font-weight: 800; font-size: .92rem; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid rgba(148,163,184,.18); display: flex; justify-content: space-between; align-items: center; }
-.today-chip { font-size: .65rem; font-weight: 800; background: #f59e0b; color: #fff; padding: 2px 6px; border-radius: 999px; margin-left: 4px; }
-.sch-item { font-size: .75rem; line-height: 1.38; padding: 5px 8px; border-radius: 8px; margin-bottom: 5px; word-break: break-word; font-weight: 600; }
-.detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; }
-.detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
-.hour-lbl { font-size: .82rem; font-weight: 800; color: #64748b; padding-top: 8px; text-align: right; font-variant-numeric: tabular-nums; }
-.slot-box { border-radius: 11px; padding: 8px 12px; font-size: .84rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; }
-.slot-empty { background: #ffffff; border: 1.5px dashed #cbd5e1; color: #94a3b8; font-weight: 500; }
-.slot-fixed { background: #f1f5f9; border-left: 4px solid #94a3b8; color: #475569; }
-.slot-dinner { background: #fffbeb; border-left: 4px solid #f59e0b; color: #92400e; }
-.st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
-.st-card-title { font-size: 1.05rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
-.st-card-total { font-size: .92rem; font-weight: 700; color: #475569; }
-.st-subj-lbl { font-size: .85rem; font-weight: 700; color: #334155; margin-bottom: 4px; }
-.cal-card { border-radius: 14px; padding: 9px 10px; min-height: 76px; margin-bottom: 6px; box-shadow: 0 3px 10px rgba(15,23,42,.03); }
-.cal-date { font-weight: 800; font-size: .86rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
-.cal-preview { font-size: .72rem; color: #64748b; line-height: 1.32; word-break: break-all; }
-.stTextArea textarea, .stTextInput input { font-size: .94rem !important; line-height: 1.6 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
-.stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
-.stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .8rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .35rem .65rem !important; }
-.stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
-.stButton > button[kind="primary"] { background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important; color: #fff !important; border: none !important; box-shadow: 0 4px 12px rgba(79,70,229,.28) !important; }
-.stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
-[data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
-[data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
-</style>
-""", unsafe_allow_html=True)
-
 today = date.today()
 
 # 사이드바
 with st.sidebar:
-    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">📅 과목별 시험 시간표</div>', unsafe_allow_html=True)
+    uc1, uc2 = st.columns([2.2, 1])
+    with uc1:
+        st.markdown(f'<div style="font-weight:800; font-size:.95rem; padding-top:4px;">👤 {html.escape(USER)}님</div>', unsafe_allow_html=True)
+    with uc2:
+        if st.button("로그아웃", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+    st.divider()
+
+    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">📅 중요 일정 · 시험 시간표</div>', unsafe_allow_html=True)
     exam_items = parse_exam_schedule(st.session_state.get("memo_exam_schedule", ""), today)
     if exam_items:
         rows_html = "".join(
@@ -340,12 +420,12 @@ with st.sidebar:
             for _, dt_lbl, subj, dday in exam_items
         )
         st.markdown(f'<div class="side-card" style="padding:10px 10px 4px 10px;">{rows_html}</div>', unsafe_allow_html=True)
-    with st.expander("✏️ 시험 일정 입력 / 수정", expanded=(not bool(exam_items))):
+    with st.expander("✏️ 일정 입력 / 수정", expanded=(not bool(exam_items))):
         st.caption("한 줄씩 입력 (예: 12/18 국어, 영어)")
-        st.text_area("시험 일정", key="memo_exam_schedule", height=100, label_visibility="collapsed", on_change=save_day, args=("exam_schedule",))
+        st.text_area("일정", key="memo_exam_schedule", height=95, label_visibility="collapsed", on_change=save_day, args=("exam_schedule",))
 
     st.write("")
-    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">🎧 공부용 백색소음</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">🎧 집중 백색소음</div>', unsafe_allow_html=True)
     noise_html = """
     <div style='padding:14px 12px; border-radius:18px; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.06); border:1px solid #e2e8f0; font-family:Pretendard,sans-serif; text-align:center;'>
         <div id='ns' style='font-size:.72rem; font-weight:800; color:#64748b; margin-bottom:8px;'>OFF</div>
@@ -414,10 +494,10 @@ with st.sidebar:
     """
     components.html(timer_html, height=235)
 
-st.markdown("""
+st.markdown(f"""
     <div class="hero-wrap">
-        <div class="hero-pill">2026.11.23 — 12.23 FINAL EXAM</div>
-        <h1 class="hero-title">기말고사 스터디 플래너</h1>
+        <div class="hero-pill">2026.11.23 — 12.23 · {html.escape(USER)}'S ROUTINE</div>
+        <h1 class="hero-title">라이프 & 스터디 플래너</h1>
     </div>
 """, unsafe_allow_html=True)
 
@@ -430,7 +510,7 @@ m1, m2 = st.columns(2, gap="medium")
 with m1:
     st.markdown(f"""
         <div class="stat-card">
-            <div class="stat-top"><span class="stat-label">🔥 기말고사 종료까지</span><span class="stat-badge" style="background:#eef2ff; color:#4f46e5;">12월 23일</span></div>
+            <div class="stat-top"><span class="stat-label">🔥 프로젝트 종료까지</span><span class="stat-badge" style="background:#eef2ff; color:#4f46e5;">12월 23일</span></div>
             <div class="stat-value" style="color:#4f46e5;">{d_day_str}</div>
         </div>
     """, unsafe_allow_html=True)
@@ -478,7 +558,7 @@ with t2:
     with st.expander(f"⚡ {picked_week_idx+1}주차 할 일 입력 → 요일별 할 일 배분", expanded=False):
         wk_task_key = f"week_tasks_{picked_week_idx}"
         st.session_state.setdefault(f"memo_{wk_task_key}", "")
-        st.caption("편하게 한 줄씩 입력 (예: 국사 15단원 일주일에 4번 / 수학 60분씩 5일)")
+        st.caption("편하게 한 줄씩 입력 (예: 국사 15단원 일주일에 4번 / 운동 30분씩 5일)")
         st.text_area("이번 주 할 일", key=f"memo_{wk_task_key}", height=115, label_visibility="collapsed", on_change=save_day, args=(wk_task_key,))
         if st.button("⚡ 이번 주(월~일) 할 일 자동 배분하기", use_container_width=True, type="primary"):
             distribute_weekly_tasks_only(active_week, st.session_state.get("memo_fixed_range", "07:00-24:00"), st.session_state.get(f"memo_{wk_task_key}", ""))
@@ -522,7 +602,7 @@ is_sel_done = st.session_state[chk_key]
 
 st.markdown(f"""
     <div class="detail-banner {'detail-banner-done' if is_sel_done else ''}">
-        <span style="font-size:1.05rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 1시간 타임테이블 & STUDY TIME</span>
+        <span style="font-size:1.05rem; font-weight:800; color:#1e293b;">📌 {sel_day.month}월 {sel_day.day}일 ({sel_wd}) 하루 루틴 & 생활습관</span>
         <span style="font-size:.85rem; font-weight:800; color:#15803d;">{'🎉 오늘 목표 완료!' if is_sel_done else ''}</span>
     </div>
 """, unsafe_allow_html=True)
@@ -533,12 +613,12 @@ with d_left:
     day_tasks = get_day_task_list(sel_key)
     color_map = {t: TASK_COLORS[idx % len(TASK_COLORS)] for idx, t in enumerate(day_tasks)}
 
-    brush_options = day_tasks + [DINNER_LABEL, "__ERASE__"]
+    brush_options = day_tasks + list(LIFE_BLOCKS.keys()) + ["__ERASE__"]
     def fmt_brush(opt):
         if opt == "__ERASE__":
             return "🧹 지우기"
-        if opt == DINNER_LABEL:
-            return DINNER_LABEL
+        if opt in LIFE_BLOCKS:
+            return opt
         return f"{color_map[opt][3]} {opt}"
 
     selected_brush = st.radio(
@@ -565,8 +645,9 @@ with d_left:
         with c_box:
             if fixed_hit:
                 st.markdown(f'<div class="slot-box slot-fixed">{html.escape(fixed_hit)}</div>', unsafe_allow_html=True)
-            elif assigned == DINNER_LABEL:
-                st.markdown(f'<div class="slot-box slot-dinner">{DINNER_LABEL}</div>', unsafe_allow_html=True)
+            elif assigned in LIFE_BLOCKS:
+                bg, bd, fg = LIFE_BLOCKS[assigned]
+                st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{html.escape(assigned)}</div>', unsafe_allow_html=True)
             elif assigned:
                 bg, bd, fg, dot = color_map.get(assigned, ("#f8fafc", "#64748b", "#1e293b", "📌"))
                 st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{dot} {html.escape(assigned)}</div>', unsafe_allow_html=True)
@@ -581,10 +662,58 @@ with d_left:
 
     st.write("")
     with st.expander("✏️ 오늘 할 일 목록 직접 수정하기 (한 줄에 하나씩)", expanded=False):
-        st.text_area("오늘 할 일 목록", key=memo_key, height=130, label_visibility="collapsed", on_change=save_day, args=(sel_key,))
+        st.text_area("오늘 할 일 목록", key=memo_key, height=120, label_visibility="collapsed", on_change=save_day, args=(sel_key,))
     st.checkbox("✅ 오늘 하루 목표 완료!", key=chk_key, on_change=save_day, args=(sel_key,))
 
 with d_right:
+    # 1) 기상·취침 & 컨디션 카드
+    raw_sl = st.session_state.get(f"memo_sleep_{sel_key}", "")
+    try:
+        saved_sl = json.loads(raw_sl) if raw_sl else {}
+    except Exception:
+        saved_sl = {}
+    st.session_state.setdefault(f"wake_{sel_key}", saved_sl.get("wake", "07:00"))
+    st.session_state.setdefault(f"sleep_{sel_key}", saved_sl.get("sleep", "23:30"))
+    st.session_state.setdefault(f"cond_{sel_key}", saved_sl.get("cond", CONDITIONS[0]))
+
+    with st.container(border=True):
+        st.markdown('<div class="st-card-hdr" style="margin-bottom:8px;"><span class="st-card-title">😴 수면 & 컨디션</span></div>', unsafe_allow_html=True)
+        sc1, sc2 = st.columns(2, gap="small")
+        with sc1:
+            st.text_input("기상 시간", key=f"wake_{sel_key}", on_change=save_sleep_cond, args=(sel_key,))
+        with sc2:
+            st.text_input("취침 시간", key=f"sleep_{sel_key}", on_change=save_sleep_cond, args=(sel_key,))
+        st.radio("오늘 컨디션", CONDITIONS, horizontal=True, key=f"cond_{sel_key}", on_change=save_sleep_cond, args=(sel_key,))
+
+    # 2) 오늘의 생활습관 체크리스트
+    habit_list = get_habit_list()
+    raw_hab = st.session_state.get(f"memo_habits_{sel_key}", "")
+    try:
+        saved_hab = set(json.loads(raw_hab)) if raw_hab else set()
+    except Exception:
+        saved_hab = set()
+    done_hab_cnt = 0
+    for h in habit_list:
+        hk = f"hab_{sel_key}_{h}"
+        st.session_state.setdefault(hk, h in saved_hab)
+        if st.session_state[hk]:
+            done_hab_cnt += 1
+
+    with st.container(border=True):
+        st.markdown(f"""
+            <div class="st-card-hdr" style="margin-bottom:8px;">
+                <span class="st-card-title">🌱 생활습관 체크</span>
+                <span class="st-card-total"><b style="color:#10b981;">{done_hab_cnt}</b> / {len(habit_list)}</span>
+            </div>
+        """, unsafe_allow_html=True)
+        for h in habit_list:
+            st.checkbox(h, key=f"hab_{sel_key}_{h}", on_change=save_habits, args=(sel_key,))
+
+    with st.expander("✏️ 생활습관 항목 수정", expanded=False):
+        st.caption("쉼표(,)로 구분해서 입력")
+        st.text_input("습관 목록", key="memo_habit_list", label_visibility="collapsed", on_change=save_day, args=("habit_list",))
+
+    # 3) DAILY TIME 카드
     study_subjs = get_study_subjects()
     raw_st = st.session_state.get(f"memo_study_time_{sel_key}", "")
     try:
@@ -602,7 +731,7 @@ with d_right:
     with st.container(border=True):
         st.markdown(f"""
             <div class="st-card-hdr">
-                <span class="st-card-title">STUDY TIME</span>
+                <span class="st-card-title">DAILY TIME</span>
                 <span class="st-card-total">TOTAL : <b style="color:#4f46e5;">{tot_h}</b> h <b style="color:#4f46e5;">{tot_m:02d}</b> m</span>
             </div>
         """, unsafe_allow_html=True)
@@ -618,20 +747,21 @@ with d_right:
                     with mc:
                         st.number_input("m", min_value=0, max_value=59, step=5, key=f"st_{sel_key}_{subj}_m", on_change=save_study_time, args=(sel_key,))
 
-    with st.expander("✏️ STUDY TIME 과목 이름 설정", expanded=False):
-        st.caption("쉼표(,)로 구분해서 입력 (예: 국어, 수학, 영어, 한국사, 과학)")
-        st.text_input("과목 목록", key="memo_study_subjects", label_visibility="collapsed", on_change=save_day, args=("study_subjects",))
+    with st.expander("✏️ DAILY TIME 항목 이름 설정", expanded=False):
+        st.caption("쉼표(,)로 구분해서 입력 (예: 공부, 운동, 독서, 스마트폰)")
+        st.text_input("항목 목록", key="memo_study_subjects", label_visibility="collapsed", on_change=save_day, args=("study_subjects",))
 
+    # 4) 인증 사진
     saved_url = st.session_state.get(f"photo_url_{sel_key}", "")
     if saved_url:
         st.image(saved_url, use_container_width=True)
-    with st.expander("📤 공부 인증 사진 올리기 / 변경하기", expanded=False):
+    with st.expander("📤 오늘의 인증 사진 올리기 / 변경하기", expanded=False):
         uploaded_file = st.file_uploader("인증 사진 선택", type=["jpg", "jpeg", "png"], key=f"photo_{sel_key}", label_visibility="collapsed")
         if uploaded_file is not None:
             file_id = f"{uploaded_file.name}_{uploaded_file.size}"
             if st.session_state.get(f"last_uploaded_{sel_key}") != file_id:
                 ext = uploaded_file.name.split(".")[-1].lower()
-                file_path = f"{sel_key}_{int(time.time())}.{ext}"
+                file_path = f"{USER}_{sel_key}_{int(time.time())}.{ext}"
                 supabase.storage.from_("photos").upload(file_path, uploaded_file.getvalue(), {"content-type": uploaded_file.type})
                 st.session_state[f"photo_url_{sel_key}"] = supabase.storage.from_("photos").get_public_url(file_path)
                 st.session_state[f"last_uploaded_{sel_key}"] = file_id

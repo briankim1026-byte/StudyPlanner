@@ -20,13 +20,8 @@ END_DATE = date(2026, 12, 23)
 TOTAL_DAYS = (END_DATE - START_DATE).days + 1
 VALID_DATES = [START_DATE + timedelta(days=i) for i in range(TOTAL_DAYS)]
 WEEKDAY_KR = ["월", "화", "수", "목", "금", "토", "일"]
+WD_MAP = {d: i for i, d in enumerate(WEEKDAY_KR)}
 CONDITIONS = ["😊 좋음", "😐 보통", "😫 피곤"]
-
-LIFE_BLOCKS = {
-    "🍽️ 저녁 식사": ("#fffbeb", "#f59e0b", "#92400e"),
-    "🏃 운동/산책": ("#ecfdf5", "#10b981", "#065f46"),
-    "🛌 휴식": ("#f0f9ff", "#0ea5e9", "#075985"),
-}
 
 TASK_COLORS = [
     ("#eef2ff", "#6366f1", "#312e81", "🟣"),
@@ -274,59 +269,169 @@ def parse_tasks(text: str):
         line = raw.strip()
         if not line:
             continue
+
+        # 1) 시간(N시간 / N분) 추출
+        hours = 1
         dur_txt = ""
-        for pat, fmt in [
-            (r"(\d+)\s*시간\s*반(?:씩)?", lambda m: f"{m.group(1)}시간 반"),
-            (r"(\d+)\s*시간\s*(\d+)\s*분(?:씩)?", lambda m: f"{m.group(1)}시간 {m.group(2)}분"),
-            (r"(\d+)\s*시간(?:씩)?", lambda m: f"{m.group(1)}시간"),
-            (r"(\d+)\s*분(?:씩)?", lambda m: f"{m.group(1)}분"),
+        for pat, h_fn, txt_fn in [
+            (r"(?:각각\s*)?(\d+)\s*시간\s*반(?:씩)?", lambda m: int(m.group(1)) + 1, lambda m: f"{m.group(1)}시간 반"),
+            (r"(?:각각\s*)?(\d+)\s*시간\s*(\d+)\s*분(?:씩)?", lambda m: max(1, (int(m.group(1))*60 + int(m.group(2)) + 59)//60), lambda m: f"{m.group(1)}시간 {m.group(2)}분"),
+            (r"(?:각각\s*)?(\d+)\s*시간(?:씩)?", lambda m: max(1, int(m.group(1))), lambda m: f"{m.group(1)}시간"),
+            (r"(?:각각\s*)?(\d+)\s*분(?:씩)?", lambda m: max(1, (int(m.group(1)) + 59)//60), lambda m: f"{m.group(1)}분"),
         ]:
             mm = re.search(pat, line)
             if mm:
-                dur_txt = fmt(mm)
-                line = (line[:mm.start()] + line[mm.end():]).strip()
+                hours = h_fn(mm)
+                dur_txt = txt_fn(mm)
+                line = (line[:mm.start()] + " " + line[mm.end():]).strip()
                 break
 
+        # 2) 요일 범위 ("월-토요일 중에", "월~토", "평일 중에", "주말 중에")
+        allowed_days = None
+        m_rng = re.search(r"([월화수목금토일])(?:요일)?\s*[-~]\s*([월화수목금토일])(?:요일)?(?:\s*중에|\s*중|\s*사이)?", line)
+        if m_rng:
+            s_i, e_i = WD_MAP[m_rng.group(1)], WD_MAP[m_rng.group(2)]
+            allowed_days = list(range(s_i, e_i + 1)) if s_i <= e_i else (list(range(s_i, 7)) + list(range(0, e_i + 1)))
+            line = (line[:m_rng.start()] + " " + line[m_rng.end():]).strip()
+        elif re.search(r"평일(?:\s*중에|\s*중)?", line):
+            allowed_days = [0, 1, 2, 3, 4]
+            line = re.sub(r"평일(?:\s*중에|\s*중)?", " ", line).strip()
+        elif re.search(r"주말(?:\s*중에|\s*중)?", line):
+            allowed_days = [5, 6]
+            line = re.sub(r"주말(?:\s*중에|\s*중)?", " ", line).strip()
+
+        # 3) 특정 요일 지정 ("일요일,화요일,목요일", "월,수,금", "화목")
+        specific_days = None
+        m_list = re.search(r"(?:[월화수목금토일]요일(?:\s*[,/·]\s*[월화수목금토일]요일)*)|(?:[월화수목금토일](?:\s*[,/·]\s*[월화수목금토일])+)", line)
+        if m_list:
+            found = re.findall(r"[월화수목금토일]", m_list.group(0))
+            specific_days = list(dict.fromkeys(WD_MAP[ch] for ch in found))
+            line = (line[:m_list.start()] + " " + line[m_list.end():]).strip()
+        else:
+            m_comp = re.search(r"(?<![가-힣])([월화수목금토일]{2,6})(?:요일)?(?![가-힣])", line)
+            if m_comp:
+                specific_days = list(dict.fromkeys(WD_MAP[ch] for ch in m_comp.group(1)))
+                line = (line[:m_comp.start()] + " " + line[m_comp.end():]).strip()
+            else:
+                m_one = re.search(r"(?<![가-힣])([월화수목금토일])요일(?![가-힣])", line)
+                if m_one:
+                    specific_days = [WD_MAP[m_one.group(1)]]
+                    line = (line[:m_one.start()] + " " + line[m_one.end():]).strip()
+
+        # 4) 회독 배수 ("* 3회독", "x 3회독", "3회독")
+        rounds = 1
+        m_rnd = re.search(r"(?:[*xX×]\s*)?(\d+)\s*회독", line)
+        if m_rnd:
+            rounds = max(1, int(m_rnd.group(1)))
+            line = (line[:m_rnd.start()] + " " + line[m_rnd.end():]).strip()
+
+        # 5) 복합 반복 ("총 3지문 각각 5번씩")
         m_multi = re.search(r"(?:총\s*)?(\d+)\s*(지문|단원|과|강|챕터).*?각각\s*(\d+)\s*(?:번|회)씩?", line)
         if m_multi:
             n_items, unit, reps = int(m_multi.group(1)), m_multi.group(2), int(m_multi.group(3))
             title = (line[:m_multi.start()] + line[m_multi.end():]).strip(" ,/-:") or raw.strip()
             sessions = [f"{title} ({i}{unit} {r}/{reps}회)" for r in range(1, reps + 1) for i in range(1, n_items + 1)]
-            tasks.append({"mode": "sessions", "sessions": sessions, "is_weekly_repeat": False})
+            tasks.append({"mode": "sessions", "sessions": sessions, "hours": hours, "is_weekly_repeat": False})
             continue
 
+        # 6) 주간 횟수/일수 ("일주일에 3번", "2일", "매일", "격일")
         freq, is_weekly_repeat = None, False
-        if re.search(r"매일|하루에\s*한\s*번", line):
+        if specific_days:
+            freq, is_weekly_repeat = len(specific_days), True
+        elif re.search(r"매일|하루에\s*한\s*번", line):
             freq, is_weekly_repeat = 7, True
-            line = re.sub(r"매일|하루에\s*한\s*번", "", line).strip()
+            line = re.sub(r"매일|하루에\s*한\s*번", " ", line).strip()
         elif re.search(r"이틀에\s*한\s*번|격일", line):
             freq, is_weekly_repeat = 4, True
-            line = re.sub(r"이틀에\s*한\s*번|격일", "", line).strip()
+            line = re.sub(r"이틀에\s*한\s*번|격일", " ", line).strip()
         else:
             m_freq = re.search(r"(?:일주일에\s*|주에\s*|주\s*)?(\d+)\s*(일|번|회)(?:씩)?", line)
             if m_freq:
                 freq = int(m_freq.group(1))
-                is_weekly_repeat = bool(re.search(r"일주일에|주에|주\s*\d", m_freq.group(0)))
-                line = (line[:m_freq.start()] + line[m_freq.end():]).strip()
+                is_weekly_repeat = bool(
+                    allowed_days is not None
+                    or re.search(r"일주일에|주에|주\s*\d", m_freq.group(0))
+                    or re.search(r"일주일에|주에", line)
+                    or dur_txt
+                )
+                line = (line[:m_freq.start()] + " " + line[m_freq.end():]).strip()
 
+        # 7) 총 분량/단원 ("총 22단원", "300문제", "70p")
         qty, unit = None, ""
         m_qty = re.search(r"(?:총\s*)?(\d+)\s*(단원|과|강|지문|챕터|회차|문제|페이지|쪽|개|장|p|P)", line)
         if m_qty:
-            qty, unit, line = int(m_qty.group(1)), m_qty.group(2), (line[:m_qty.start()] + line[m_qty.end():]).strip()
+            qty, unit = int(m_qty.group(1)), m_qty.group(2)
+            line = (line[:m_qty.start()] + " " + line[m_qty.end():]).strip()
 
-        title = re.sub(r"\s+", " ", line).strip(" ,/-:") or raw.strip()
-        if dur_txt and not qty:
-            title = f"{title} ({dur_txt})"
-        tasks.append({"mode": "smart", "title": title, "qty": qty, "unit": unit, "freq": freq, "is_weekly_repeat": is_weekly_repeat})
+        # 남은 불필요한 부사 제거 후 제목 추출
+        line = re.sub(r"\b(?:일주일에|주에|중에|각각)\b", " ", line)
+        title = re.sub(r"\s+", " ", line).strip(" ,/-:*xX×") or raw.strip()
+        if dur_txt and hours > 1:
+            base_label = f"{title} ({dur_txt})"
+        elif dur_txt and not qty and rounds == 1:
+            base_label = f"{title} ({dur_txt})"
+        else:
+            base_label = title
+
+        tasks.append({
+            "mode": "smart",
+            "title": title,
+            "base_label": base_label,
+            "qty": qty,
+            "unit": unit,
+            "rounds": rounds,
+            "freq": freq,
+            "hours": hours,
+            "specific_days": specific_days,
+            "allowed_days": allowed_days,
+            "is_weekly_repeat": is_weekly_repeat,
+        })
     return tasks
 
-def auto_fill_day_grid(d: date, task_list, range_str: str):
+def format_round_chunk(title: str, unit: str, items):
+    # items: list of (round_no, unit_no)
+    groups = []
+    for r, u in items:
+        if groups and groups[-1][0] == r:
+            groups[-1][2] = u
+        else:
+            groups.append([r, u, u])
+    parts = []
+    for r, s_u, e_u in groups:
+        rng = f"{s_u}{unit}" if s_u == e_u else f"{s_u}~{e_u}{unit}"
+        parts.append(f"{r}회독 {rng}")
+    return f"{title} " + " · ".join(parts)
+
+def auto_fill_day_grid(d: date, task_entries, range_str: str):
+    # task_entries: list of (label, hours)
     dk = d.strftime('%Y_%m_%d')
     free_hours = get_free_hours(d.weekday(), range_str)
+    used = set()
     grid = {}
-    for idx, t in enumerate(task_list):
-        if idx < len(free_hours):
-            grid[str(free_hours[idx])] = t
+
+    for label, hrs in task_entries:
+        hrs = max(1, hrs)
+        placed = False
+        # 연속된 hrs시간 빈 칸 우선 탐색
+        if hrs > 1 and len(free_hours) >= hrs:
+            for i in range(len(free_hours) - hrs + 1):
+                block = free_hours[i:i+hrs]
+                if all(h not in used for h in block) and all(block[j+1] - block[j] == 1 for j in range(hrs - 1)):
+                    for h in block:
+                        grid[str(h)] = label
+                        used.add(h)
+                    placed = True
+                    break
+        if not placed:
+            cnt = 0
+            for h in free_hours:
+                if h not in used:
+                    grid[str(h)] = label
+                    used.add(h)
+                    cnt += 1
+                    if cnt == hrs:
+                        break
+
     st.session_state[f"memo_grid_{dk}"] = json.dumps(grid, ensure_ascii=False)
     save_day(f"grid_{dk}")
 
@@ -334,20 +439,60 @@ def distribute_days_and_grid(active_days, range_str: str, tasks):
     n_days = len(active_days)
     if not n_days or not tasks:
         return
-    day_free = {d: len(get_free_hours(d.weekday(), range_str)) * 60 for d in active_days}
-    day_tasks = {d: [] for d in active_days}
+
+    day_free = {d: len(get_free_hours(d.weekday(), range_str)) for d in active_days}
+    day_load = {d: 0 for d in active_days}
+    day_entries = {d: [] for d in active_days}  # list of (label, hours)
     SEQ_UNITS = {"단원", "과", "강", "지문", "챕터", "회차"}
 
-    for task in tasks:
+    # 제약 조건이 엄격한 작업(특정 요일 > 요일 범위 > 자유 배분) 순으로 정렬
+    def task_priority(t):
+        if t.get("specific_days"):
+            return 0
+        if t.get("allowed_days"):
+            return 1
+        return 2
+
+    for task in sorted(tasks, key=task_priority):
+        hrs = task.get("hours", 1)
         if task["mode"] == "sessions":
             for label in task["sessions"]:
-                best_d = max(active_days, key=lambda d: (day_free[d] - len(day_tasks[d]) * 60, -len(day_tasks[d])))
-                day_tasks[best_d].append(label)
+                best_d = max(active_days, key=lambda d: (day_free[d] - day_load[d], -len(day_entries[d])))
+                day_entries[best_d].append((label, hrs))
+                day_load[best_d] += hrs
             continue
 
-        title, qty, unit, freq = task["title"], task["qty"], task["unit"], task["freq"]
-        k = min(freq, n_days) if freq else (min(qty, n_days) if (qty and unit in SEQ_UNITS) else (n_days if qty else min(2, n_days)))
-        chosen = sorted(sorted(active_days, key=lambda d: (-(day_free[d] - len(day_tasks[d]) * 60), d))[:k])
+        # 다회독(예: 22단원 * 3회독) 처리
+        if task.get("rounds", 1) > 1 and task.get("qty"):
+            all_items = [(r, u) for r in range(1, task["rounds"] + 1) for u in range(1, task["qty"] + 1)]
+            pool = [d for d in active_days if not task.get("allowed_days") or d.weekday() in task["allowed_days"]] or active_days
+            chunks = split_into_chunks(len(all_items), len(pool))
+            cur = 0
+            for d, c in zip(pool, chunks):
+                sub = all_items[cur:cur+c]
+                cur += c
+                if sub:
+                    lbl = format_round_chunk(task["title"], task["unit"], sub)
+                    day_entries[d].append((lbl, hrs))
+                    day_load[d] += hrs
+            continue
+
+        title = task["title"]
+        base_label = task.get("base_label", title)
+        qty, unit, freq = task["qty"], task["unit"], task["freq"]
+        spec_days = task.get("specific_days")
+        allow_days = task.get("allowed_days")
+
+        if spec_days:
+            chosen = [d for d in active_days if d.weekday() in spec_days]
+            k = len(chosen)
+        else:
+            pool = [d for d in active_days if (not allow_days or d.weekday() in allow_days)] or active_days
+            k = min(freq, len(pool)) if freq else (min(qty, len(pool)) if (qty and unit in SEQ_UNITS) else (len(pool) if qty else min(2, len(pool))))
+            chosen = sorted(sorted(pool, key=lambda d: (-(day_free[d] - day_load[d]), len(day_entries[d]), d))[:k])
+
+        if not chosen:
+            continue
 
         sessions = []
         if qty and unit in SEQ_UNITS:
@@ -356,31 +501,26 @@ def distribute_days_and_grid(active_days, range_str: str, tasks):
                 cur = start_num
                 for c in split_into_chunks(qty, k):
                     end = cur + c - 1
-                    sessions.append(f"{title} {cur}{unit}" if cur == end else f"{title} {cur}~{end}{unit}")
+                    rng = f"{cur}{unit}" if cur == end else f"{cur}~{end}{unit}"
+                    sessions.append(f"{title} {rng}")
                     cur = end + 1
             else:
                 sessions = [f"{title} {start_num + (i % qty)}{unit}" for i in range(k)]
         elif qty:
             sessions = [f"{title} {c}{unit}" for c in split_into_chunks(qty, k) if c > 0]
         else:
-            cnt = freq if freq else k
-            sessions = [f"{title} ({i+1}/{cnt}회)" for i in range(cnt)]
+            sessions = [base_label for _ in range(k)]
 
-        if len(sessions) <= len(chosen):
-            for d, label in zip(chosen, sessions):
-                day_tasks[d].append(label)
-        else:
-            for label in sessions:
-                best_d = max(active_days, key=lambda d: (day_free[d] - len(day_tasks[d]) * 60))
-                day_tasks[best_d].append(label)
+        for d, label in zip(chosen, sessions):
+            day_entries[d].append((label, hrs))
+            day_load[d] += hrs
 
     for d in active_days:
         dk = d.strftime('%Y_%m_%d')
-        st.session_state[f"memo_{dk}"] = "\n".join(day_tasks[d])
+        st.session_state[f"memo_{dk}"] = "\n".join(lbl for lbl, _ in day_entries[d])
         save_day(dk)
-        auto_fill_day_grid(d, day_tasks[d], range_str)
+        auto_fill_day_grid(d, day_entries[d], range_str)
 
-# 시험 전까지 전체 할 일 → 1) 주차별 배분 → 2) 매일 배분 → 3) 1시간 타임테이블 자동 배치
 def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total_text: str):
     tasks = parse_tasks(total_text)
     if not tasks:
@@ -394,6 +534,7 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
     if not n_wks:
         return
 
+    all_active_days = [d for _, days in active_weeks for d in days]
     week_task_objs = {w_idx: [] for w_idx, _ in active_weeks}
     week_summary_lines = {w_idx: [] for w_idx, _ in active_weeks}
     SEQ_UNITS = {"단원", "과", "강", "지문", "챕터", "회차"}
@@ -406,15 +547,47 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
                 sub = task["sessions"][cur:cur+c]
                 cur += c
                 if sub:
-                    week_task_objs[w_idx].append({"mode": "sessions", "sessions": sub})
+                    week_task_objs[w_idx].append({"mode": "sessions", "sessions": sub, "hours": task.get("hours", 1)})
                     week_summary_lines[w_idx].append(f"{sub[0]} 외 {len(sub)-1}건" if len(sub) > 1 else sub[0])
             continue
 
-        title, qty, unit, freq, is_wk_rep = task["title"], task["qty"], task["unit"], task["freq"], task["is_weekly_repeat"]
+        # 다회독 전체 기간 분할 -> 각 주차별 exact task로 전달
+        if task.get("rounds", 1) > 1 and task.get("qty"):
+            all_items = [(r, u) for r in range(1, task["rounds"] + 1) for u in range(1, task["qty"] + 1)]
+            chunks = split_into_chunks(len(all_items), len(all_active_days))
+            day_item_map = {}
+            cur = 0
+            for d, c in zip(all_active_days, chunks):
+                day_item_map[d] = all_items[cur:cur+c]
+                cur += c
+            for w_idx, days_in_wk in active_weeks:
+                wk_items = [it for d in days_in_wk for it in day_item_map[d]]
+                if wk_items:
+                    week_summary_lines[w_idx].append(format_round_chunk(task["title"], task["unit"], wk_items))
+                # 주차 내 각 날짜에 정확히 그날의 회독 몫이 들어가도록 1일 단위 세션으로 전달
+                for d in days_in_wk:
+                    if day_item_map[d]:
+                        lbl = format_round_chunk(task["title"], task["unit"], day_item_map[d])
+                        week_task_objs[w_idx].append({
+                            "mode": "smart", "title": task["title"], "base_label": lbl,
+                            "qty": None, "unit": "", "rounds": 1, "freq": 1,
+                            "hours": task.get("hours", 1), "specific_days": [d.weekday()],
+                            "allowed_days": None, "is_weekly_repeat": True
+                        })
+            continue
+
+        title = task["title"]
+        base_label = task.get("base_label", title)
+        qty, unit, freq, is_wk_rep = task["qty"], task["unit"], task["freq"], task["is_weekly_repeat"]
+
         if is_wk_rep and not qty:
             for w_idx, _ in active_weeks:
                 week_task_objs[w_idx].append(dict(task))
-                week_summary_lines[w_idx].append(f"{title} 주 {freq}회")
+                if task.get("specific_days"):
+                    d_names = ",".join(WEEKDAY_KR[i] for i in task["specific_days"])
+                    week_summary_lines[w_idx].append(f"{base_label} ({d_names})")
+                else:
+                    week_summary_lines[w_idx].append(f"{base_label} 주 {freq}회")
         elif qty:
             chunks = split_into_chunks(qty, n_wks)
             cur = 1
@@ -438,7 +611,7 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
                     t_copy = dict(task)
                     t_copy["freq"] = c
                     week_task_objs[w_idx].append(t_copy)
-                    week_summary_lines[w_idx].append(f"{title} {c}회")
+                    week_summary_lines[w_idx].append(f"{base_label} {c}회")
 
     for w_idx, days_in_wk in active_weeks:
         wk_key = f"week_tasks_{w_idx}"
@@ -496,7 +669,7 @@ def move_hour_slot(dk: str, hour: int, direction: int, free_hours):
 
 today = date.today()
 
-# 사이드바
+# 사이드바 (백색소음 제거됨)
 with st.sidebar:
     uc1, uc2 = st.columns([2.2, 1])
     with uc1:
@@ -519,47 +692,6 @@ with st.sidebar:
     with st.expander("✏️ 일정 입력 / 수정", expanded=(not bool(exam_items))):
         st.caption("한 줄씩 입력 (예: 12/18 국어, 영어)")
         st.text_area("일정", key="memo_exam_schedule", height=95, label_visibility="collapsed", on_change=save_day, args=("exam_schedule",))
-
-    st.write("")
-    st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">🎧 집중 백색소음</div>', unsafe_allow_html=True)
-    noise_html = """
-    <div style='padding:14px 12px; border-radius:18px; background:#fff; box-shadow:0 8px 22px rgba(15,23,42,.06); border:1px solid #e2e8f0; font-family:Pretendard,sans-serif; text-align:center;'>
-        <div id='ns' style='font-size:.72rem; font-weight:800; color:#64748b; margin-bottom:8px;'>OFF</div>
-        <div style='display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px; margin-bottom:10px;'>
-            <button onclick='playNoise("pink","🌧️ 빗소리 재생 중")' style='padding:7px 2px; cursor:pointer; background:#eef2ff; color:#4f46e5; border:none; border-radius:9px; font-weight:700; font-size:.73rem;'>🌧️ 빗소리</button>
-            <button onclick='playNoise("brown","☕ 카페·바람 재생 중")' style='padding:7px 2px; cursor:pointer; background:#ecfdf5; color:#059669; border:none; border-radius:9px; font-weight:700; font-size:.73rem;'>☕ 바람</button>
-            <button onclick='playNoise("white","📻 백색소음 재생 중")' style='padding:7px 2px; cursor:pointer; background:#f1f5f9; color:#334155; border:none; border-radius:9px; font-weight:700; font-size:.73rem;'>📻 백색</button>
-        </div>
-        <div style='display:flex; align-items:center; gap:8px;'>
-            <span style='font-size:.75rem;'>🔊</span>
-            <input type='range' id='vol' min='0' max='0.35' step='0.01' value='0.12' oninput='setVol(this.value)' style='flex:1; accent-color:#4f46e5;'>
-            <button onclick='stopNoise()' style='padding:5px 10px; cursor:pointer; background:#fee2e2; color:#dc2626; border:none; border-radius:8px; font-weight:700; font-size:.72rem;'>정지</button>
-        </div>
-        <script>
-            let ctx=null, src=null, gain=null;
-            function stopNoise(){ if(src){try{src.stop();}catch(e){} src=null;} document.getElementById('ns').textContent='OFF'; }
-            function setVol(v){ if(gain) gain.gain.value=parseFloat(v); }
-            function playNoise(type, label){
-                stopNoise();
-                ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-                if(ctx.state==='suspended') ctx.resume();
-                let len = ctx.sampleRate * 3, buf = ctx.createBuffer(1, len, ctx.sampleRate), out = buf.getChannelData(0);
-                let b0=0,b1=0,b2=0,last=0;
-                for(let i=0;i<len;i++){
-                    let w = Math.random()*2-1;
-                    if(type==='white'){ out[i]=w*0.5; }
-                    else if(type==='pink'){ b0=0.997*b0+w*0.029; b1=0.985*b1+w*0.032; b2=0.950*b2+w*0.048; out[i]=(b0+b1+b2+w*0.05)*1.5; }
-                    else { out[i]=(last+(0.02*w))/1.02; last=out[i]; out[i]*=3.2; }
-                }
-                src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
-                gain = ctx.createGain(); gain.gain.value = parseFloat(document.getElementById('vol').value);
-                src.connect(gain); gain.connect(ctx.destination); src.start();
-                document.getElementById('ns').textContent = label;
-            }
-        </script>
-    </div>
-    """
-    components.html(noise_html, height=125)
 
     st.write("")
     st.markdown('<div style="font-size:.95rem; font-weight:800; color:#1e293b; margin-bottom:8px;">⏱️ 집중 타이머</div>', unsafe_allow_html=True)
@@ -660,8 +792,8 @@ with t2:
                 plan_start = st.date_input("시작일", value=default_s, min_value=START_DATE, max_value=END_DATE)
             with dc2:
                 plan_end = st.date_input("목표 종료일(시험 전날)", value=END_DATE, min_value=START_DATE, max_value=END_DATE)
-            st.caption("시험 전까지 할 일을 한 줄씩 입력 (예: 국사 15단원 / 수학 300문제 / 매일 영단어 30분 / 주 3회 운동)")
-            st.text_area("전체 할 일", key="memo_total_exam_tasks", height=110, label_visibility="collapsed", on_change=save_day, args=("total_exam_tasks",))
+            st.caption("자유롭게 한 줄씩 입력 (예: 수학 일주일에 일요일,화요일,목요일 각각 2시간 / 국사 총 22단원 * 3회독)")
+            st.text_area("전체 할 일", key="memo_total_exam_tasks", height=130, label_visibility="collapsed", on_change=save_day, args=("total_exam_tasks",))
             if st.button("🚀 전체 기간 → 주간 → 일간 → 시간표 자동 배분!", use_container_width=True, type="primary"):
                 if plan_start <= plan_end:
                     distribute_exam_total_plan(plan_start, plan_end, st.session_state.get("memo_fixed_range", "07:00-24:00"), st.session_state.get("memo_total_exam_tasks", ""))
@@ -672,7 +804,7 @@ with t2:
             wk_task_key = f"week_tasks_{picked_week_idx}"
             st.session_state.setdefault(f"memo_{wk_task_key}", "")
             st.caption("이번 주 할 일만 따로 수정해서 다시 배분할 수 있어요.")
-            st.text_area("이번 주 할 일", key=f"memo_{wk_task_key}", height=110, label_visibility="collapsed", on_change=save_day, args=(wk_task_key,))
+            st.text_area("이번 주 할 일", key=f"memo_{wk_task_key}", height=130, label_visibility="collapsed", on_change=save_day, args=(wk_task_key,))
             if st.button(f"⚡ {picked_week_idx+1}주차만 다시 배분하기", use_container_width=True):
                 active_d = [d for d in active_week if d is not None]
                 distribute_days_and_grid(active_d, st.session_state.get("memo_fixed_range", "07:00-24:00"), parse_tasks(st.session_state.get(f"memo_{wk_task_key}", "")))
@@ -727,21 +859,19 @@ with d_left:
     day_tasks = get_day_task_list(sel_key)
     color_map = {t: TASK_COLORS[idx % len(TASK_COLORS)] for idx, t in enumerate(day_tasks)}
 
-    brush_options = day_tasks + list(LIFE_BLOCKS.keys()) + ["__ERASE__"]
-    def fmt_brush(opt):
-        if opt == "__ERASE__":
-            return "🧹 지우기"
-        if opt in LIFE_BLOCKS:
-            return opt
-        return f"{color_map[opt][3]} {opt}"
-
-    selected_brush = st.radio(
-        "칠할 항목을 고른 뒤 빈 칸을 누르거나, 배치된 항목의 ▲/▼로 시간을 바로 옮기세요",
-        brush_options,
-        format_func=fmt_brush,
-        horizontal=True,
-        key=f"brush_{sel_key}"
-    )
+    if day_tasks:
+        brush_options = day_tasks + ["__ERASE__"]
+        def fmt_brush(opt):
+            return "🧹 지우기" if opt == "__ERASE__" else f"{color_map[opt][3]} {opt}"
+        selected_brush = st.radio(
+            "칠할 항목을 고른 뒤 빈 칸을 누르거나, 배치된 항목의 ▲/▼로 시간을 바로 옮기세요",
+            brush_options,
+            format_func=fmt_brush,
+            horizontal=True,
+            key=f"brush_{sel_key}"
+        )
+    else:
+        selected_brush = "__ERASE__"
 
     range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
     wake_min, sleep_min = parse_range(range_str)
@@ -761,9 +891,6 @@ with d_left:
         with c_box:
             if fixed_hit:
                 st.markdown(f'<div class="slot-box slot-fixed">{html.escape(fixed_hit)}</div>', unsafe_allow_html=True)
-            elif assigned in LIFE_BLOCKS:
-                bg, bd, fg = LIFE_BLOCKS[assigned]
-                st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{html.escape(assigned)}</div>', unsafe_allow_html=True)
             elif assigned:
                 bg, bd, fg, dot = color_map.get(assigned, ("#f8fafc", "#64748b", "#1e293b", "📌"))
                 st.markdown(f'<div class="slot-box" style="background:{bg}; border-left:4px solid {bd}; color:{fg};">{dot} {html.escape(assigned)}</div>', unsafe_allow_html=True)

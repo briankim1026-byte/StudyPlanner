@@ -47,9 +47,13 @@ st.markdown("""
 <style>
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 html, body, [class*="css"] { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif !important; color: #0f172a; }
+html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+}
 [data-testid="stDecoration"] { display: none; }
 footer { visibility: hidden; }
-.block-container { padding-top: 2rem !important; padding-bottom: 3rem !important; max-width: 1320px; }
+.block-container { padding-top: 2rem !important; padding-bottom: 3rem !important; max-width: 1320px; box-sizing: border-box !important; }
 .stApp {
     background-color: #f6f8fc;
     background-image: radial-gradient(at 8% 10%, rgba(129,140,248,.14) 0px, transparent 42%),
@@ -57,7 +61,7 @@ footer { visibility: hidden; }
                       radial-gradient(at 50% 95%, rgba(167,243,208,.12) 0px, transparent 45%);
     background-attachment: fixed;
 }
-[data-testid="stSidebar"] { background: rgba(255,255,255,.85); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
+[data-testid="stSidebar"] { background: rgba(255,255,255,.88); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
 .side-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px; box-shadow: 0 6px 18px rgba(15,23,42,.04); margin-bottom: 10px; }
 .exam-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; border-radius: 10px; background: #f8fafc; margin-bottom: 6px; font-size: .8rem; }
 .exam-dday { font-size: .7rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #4f46e5; white-space: nowrap; }
@@ -72,18 +76,18 @@ footer { visibility: hidden; }
 .stat-badge { font-size: .75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
 .stat-value { font-size: 1.65rem; font-weight: 900; letter-spacing: -.02em; }
 .sec-header { display: flex; align-items: center; gap: 8px; font-size: 1.12rem; font-weight: 800; color: #1e293b; margin: 18px 0 10px 0; }
-.sec-dot { width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #4f46e5, #0ea5e9); display: inline-block; }
+.sec-dot { width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #4f46e5, #0ea5e9); display: inline-block; flex-shrink: 0; }
 [data-testid="stExpander"] { background: rgba(255,255,255,.9) !important; border: 1px solid #e2e8f0 !important; border-radius: 16px !important; box-shadow: 0 4px 14px rgba(15,23,42,.035) !important; }
 .week-card { border-radius: 18px; padding: 13px 11px; min-height: 185px; margin-bottom: 8px; box-shadow: 0 6px 18px rgba(15,23,42,.04); transition: transform .18s ease; }
 .week-card:hover { transform: translateY(-2px); }
 .week-date { font-weight: 800; font-size: .92rem; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid rgba(148,163,184,.18); display: flex; justify-content: space-between; align-items: center; }
 .today-chip { font-size: .65rem; font-weight: 800; background: #f59e0b; color: #fff; padding: 2px 6px; border-radius: 999px; margin-left: 4px; }
 .sch-item { font-size: .75rem; line-height: 1.38; padding: 5px 8px; border-radius: 8px; margin-bottom: 5px; word-break: break-word; font-weight: 600; }
-.fixed-chip-row { font-size: .78rem; padding: 5px 9px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 4px; color: #334155; }
-.detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; }
+.fixed-chip-row { font-size: .78rem; padding: 5px 9px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; margin-bottom: 4px; color: #334155; word-break: break-word; }
+.detail-banner { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px 20px; margin: 14px 0 12px 0; box-shadow: 0 6px 18px rgba(15,23,42,.04); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
 .detail-banner-done { background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%); border: 1.5px solid #86efac; }
 .hour-lbl { font-size: .78rem; font-weight: 800; color: #64748b; padding-top: 9px; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.slot-box { border-radius: 11px; padding: 8px 12px; font-size: .84rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; }
+.slot-box { border-radius: 11px; padding: 8px 12px; font-size: .84rem; font-weight: 700; min-height: 38px; display: flex; align-items: center; margin-bottom: 4px; word-break: break-word; }
 .slot-empty { background: #fff; border: 1.5px dashed #cbd5e1; color: #94a3b8; font-weight: 500; }
 .slot-fixed { background: #f1f5f9; border-left: 4px solid #94a3b8; color: #475569; }
 .st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
@@ -92,7 +96,7 @@ footer { visibility: hidden; }
 .cal-card { border-radius: 14px; padding: 9px 10px; min-height: 76px; margin-bottom: 6px; box-shadow: 0 3px 10px rgba(15,23,42,.03); }
 .cal-date { font-weight: 800; font-size: .86rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
 .cal-preview { font-size: .72rem; color: #64748b; line-height: 1.32; word-break: break-all; }
-.stTextArea textarea, .stTextInput input { font-size: .94rem !important; line-height: 1.6 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
+.stTextArea textarea, .stTextInput input { font-size: 16px !important; line-height: 1.55 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
 .stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
 .stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .78rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .32rem .45rem !important; }
 .stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
@@ -100,13 +104,95 @@ footer { visibility: hidden; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
 [data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
 [data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
+.tt-row-marker, .cal-row-marker { display: none; height: 0; margin: 0; padding: 0; }
+
+/* 모바일(아이폰) 화면 최적화 */
+@media (max-width: 768px) {
+    .block-container {
+        padding-top: 1.1rem !important;
+        padding-left: 0.7rem !important;
+        padding-right: 0.7rem !important;
+        padding-bottom: 2.2rem !important;
+    }
+    .hero-wrap { margin-bottom: 12px; }
+    .hero-pill { font-size: .7rem; padding: 4px 10px; }
+    .hero-title { font-size: 1.55rem; }
+    .stat-card { padding: 12px 15px; min-height: auto; border-radius: 16px; }
+    .stat-value { font-size: 1.35rem; }
+    .sec-header { font-size: 1rem; margin: 14px 0 8px 0; }
+    .week-card { min-height: auto; padding: 10px 11px; border-radius: 14px; }
+    .detail-banner { padding: 11px 14px; border-radius: 14px; }
+    .detail-banner span:first-child { font-size: .92rem !important; }
+    .hour-lbl { font-size: .68rem; padding-top: 0; text-align: left; }
+    .slot-box { padding: 6px 8px; font-size: .76rem; min-height: 34px; margin-bottom: 0; border-radius: 9px; }
+
+    /* 타임테이블 행: 아이폰에서도 1줄 가로 정렬 유지 */
+    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
+        align-items: center !important;
+        margin-bottom: 4px !important;
+    }
+    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(1),
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(1) {
+        width: 66px !important;
+        min-width: 66px !important;
+        max-width: 66px !important;
+        flex: 0 0 66px !important;
+    }
+    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(2),
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(2) {
+        width: auto !important;
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+    }
+    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(3),
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(3),
+    .stElementContainer:has(.tt-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div:nth-child(4),
+    .element-container:has(.tt-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div:nth-child(4) {
+        width: 32px !important;
+        min-width: 32px !important;
+        max-width: 32px !important;
+        flex: 0 0 32px !important;
+    }
+    .stElementContainer:has(.tt-row-marker) + .stElementContainer .stButton > button,
+    .element-container:has(.tt-row-marker) + .element-container .stButton > button {
+        padding: 0.2rem 0 !important;
+        min-height: 32px !important;
+        font-size: 0.72rem !important;
+    }
+
+    /* 전체 달력: 아이폰에서도 7요일 그리드 유지 */
+    .stElementContainer:has(.cal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
+    .element-container:has(.cal-row-marker) + .element-container [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 3px !important;
+    }
+    .stElementContainer:has(.cal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div,
+    .element-container:has(.cal-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div {
+        width: calc(14.28% - 3px) !important;
+        min-width: 0 !important;
+        flex: 1 1 0% !important;
+    }
+    .cal-card { padding: 5px 4px; min-height: 52px; border-radius: 10px; margin-bottom: 3px; }
+    .cal-date { font-size: .68rem; flex-direction: column; align-items: flex-start; gap: 1px; margin-bottom: 2px; }
+    .cal-preview { display: none; }
+    .stElementContainer:has(.cal-row-marker) + .stElementContainer .stButton > button,
+    .element-container:has(.cal-row-marker) + .element-container .stButton > button {
+        padding: 2px 0 !important;
+        min-height: 24px !important;
+        font-size: .65rem !important;
+        border-radius: 7px !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
 # 1. 개인별 로그인 게이트
 if "current_user" not in st.session_state:
     st.markdown("""
-        <div class="hero-wrap" style="margin-top:40px;">
+        <div class="hero-wrap" style="margin-top:32px;">
             <div class="hero-pill">MENTOR · MENTEE HABIT PROJECT</div>
             <h1 class="hero-title">라이프 & 스터디 플래너</h1>
         </div>
@@ -227,7 +313,6 @@ def get_free_hours(wd_idx: int, range_str: str):
     return free_h
 
 def extract_task_hours(label: str):
-    # 예: "영어 (2시간)" -> ("영어", 2), "수학 (1시간 반)" -> ("수학", 2), "국사 1회독 1~3단원" -> ("국사 1회독 1~3단원", 1)
     m_hb = re.search(r"\s*\((\d+)\s*시간\s*반\)\s*$", label)
     if m_hb:
         return label[:m_hb.start()].strip(), int(m_hb.group(1)) + 1
@@ -450,7 +535,6 @@ def auto_fill_day_grid(d: date, task_entries, range_str: str, existing_grid=None
     grid = dict(existing_grid) if existing_grid else {}
     used = {int(h_str) for h_str in grid.keys() if h_str.isdigit()}
 
-    # 2시간 이상 연강 일정을 먼저 연속 칸에 배치하고, 1시간 일정을 남은 빈 칸에 배치
     ordered_entries = sorted(task_entries, key=lambda x: -max(1, x[1]))
     for label, hrs in ordered_entries:
         hrs = max(1, hrs)
@@ -690,7 +774,6 @@ def carry_over_uncompleted_to_next_day(src_day: date, range_str: str) -> int:
     if not uncompleted:
         return 0
 
-    # 1) 원본 날짜에서는 완료한 항목만 남기고, 미완료 항목은 시간표에서도 제거
     kept_tasks = [t for t in src_tasks if t in done_set]
     st.session_state[f"memo_{src_dk}"] = "\n".join(kept_tasks)
     st.session_state[f"memo_carried_{src_dk}"] = "1"
@@ -704,7 +787,6 @@ def carry_over_uncompleted_to_next_day(src_day: date, range_str: str) -> int:
     st.session_state[f"memo_grid_{src_dk}"] = json.dumps(cleaned_src_grid, ensure_ascii=False)
     save_day(f"grid_{src_dk}")
 
-    # 2) 다음 날짜 할 일 목록에 [이월] 태그로 추가하고 다음 날짜 빈 시간에 자동 배치
     nxt_tasks = get_day_task_list(nxt_dk)
     new_entries = []
     for t in uncompleted:
@@ -832,7 +914,7 @@ with st.sidebar:
         <div id='st' style='font-size:.72rem; font-weight:800; color:#64748b; letter-spacing:.06em;'>READY</div>
         <div id='tm' style='color:#1e293b; font-size:2.4rem; font-weight:900; font-variant-numeric:tabular-nums; margin:4px 0 10px 0;'>00:00</div>
         <div style='margin-bottom:12px;'>
-            <input type='number' id='cm' value='50' min='1' style='width:58px; padding:5px; border-radius:9px; border:1.5px solid #e2e8f0; text-align:center; font-weight:800;'> <span style='font-size:.82rem; font-weight:700; color:#64748b;'>분</span>
+            <input type='number' id='cm' value='50' min='1' style='width:58px; padding:5px; border-radius:9px; border:1.5px solid #e2e8f0; text-align:center; font-weight:800; font-size:16px;'> <span style='font-size:.82rem; font-weight:700; color:#64748b;'>분</span>
         </div>
         <div style='display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;'>
             <button onclick='go(document.getElementById("cm").value,"FOCUS")' style='padding:8px; cursor:pointer; background:linear-gradient(135deg,#4f46e5,#2563eb); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:.8rem;'>🔥 집중</button>
@@ -1095,7 +1177,6 @@ with d_left:
     color_map = {t: TASK_COLORS[idx % len(TASK_COLORS)] for idx, t in enumerate(day_tasks)}
     range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
 
-    # 1) 오늘 할 일 완료 체크 & 미완료 항목 다음날 이월
     with st.container(border=True):
         st.markdown(f"""
             <div class="st-card-hdr" style="margin-bottom:8px;">
@@ -1123,14 +1204,12 @@ with d_left:
         else:
             st.caption("배정된 할 일이 없어요.")
 
-    # 2) 자동 배치된 1시간 타임테이블 (▲/▼로 시간 이동만 가능)
     wake_min, sleep_min = parse_range(range_str)
     start_h, end_h = max(0, wake_min // 60), min(30, (sleep_min + 59) // 60)
     fixed_events = parse_fixed_schedule(st.session_state.get(f"memo_fixed_{sel_day.weekday()}", ""))
     free_hours = get_free_hours(sel_day.weekday(), range_str)
     day_grid = load_day_grid(sel_key)
 
-    # 각 할 일이 총 몇 칸 배치됐는지 계산 (1/2시간, 2/2시간 명확 표기용)
     slot_totals = {}
     for h in range(start_h, end_h):
         val = day_grid.get(str(h))
@@ -1145,6 +1224,7 @@ with d_left:
         disp_s = h % 24
         disp_e = (h + 1) % 24
 
+        st.markdown('<div class="tt-row-marker"></div>', unsafe_allow_html=True)
         c_time, c_box, c_up, c_dn = st.columns([1.45, 4.15, 0.55, 0.55], gap="small")
         with c_time:
             st.markdown(f'<div class="hour-lbl">{disp_s:02d}:00~{disp_e:02d}:00</div>', unsafe_allow_html=True)
@@ -1250,12 +1330,14 @@ with d_right:
                 st.rerun()
 
 st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 전체 달력</div>', unsafe_allow_html=True)
+st.markdown('<div class="cal-row-marker"></div>', unsafe_allow_html=True)
 header_cols = st.columns(7)
 for i, day_name in enumerate(WEEKDAY_KR):
     color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#64748b"
-    header_cols[i].markdown(f"<div style='text-align:center; font-weight:800; font-size:.85rem; color:{color}; padding-bottom:6px;'>{day_name}</div>", unsafe_allow_html=True)
+    header_cols[i].markdown(f"<div style='text-align:center; font-weight:800; font-size:.82rem; color:{color}; padding-bottom:6px;'>{day_name}</div>", unsafe_allow_html=True)
 
 for week in WEEKS:
+    st.markdown('<div class="cal-row-marker"></div>', unsafe_allow_html=True)
     cols = st.columns(7)
     for i, day in enumerate(week):
         with cols[i]:
@@ -1277,7 +1359,7 @@ for week in WEEKS:
                 preview = (memo_txt.replace("\n", " ")[:22] + "…") if len(memo_txt) > 22 else memo_txt.replace("\n", " ")
                 st.markdown(f"""
                     <div class="cal-card" style="background:{bg}; border:{border};">
-                        <div class="cal-date" style="color:{day_color};"><span>{day.month}/{day.day}{' 🔥' if day == today else ''}</span><span style="font-size:.78rem;">{icons}</span></div>
+                        <div class="cal-date" style="color:{day_color};"><span>{day.month}/{day.day}{' 🔥' if day == today else ''}</span><span style="font-size:.74rem;">{icons}</span></div>
                         <div class="cal-preview">{html.escape(preview)}</div>
                     </div>
                 """, unsafe_allow_html=True)

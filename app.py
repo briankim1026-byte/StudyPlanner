@@ -4,7 +4,7 @@ import re
 import time
 import streamlit as st
 import streamlit.components.v1 as components
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from supabase import create_client, Client
 
 st.set_page_config(page_title="라이프 & 스터디 플래너", page_icon="✨", layout="wide")
@@ -14,6 +14,11 @@ def init_supabase() -> Client:
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
 supabase = init_supabase()
+
+KST = timezone(timedelta(hours=9))
+
+def get_kst_today() -> date:
+    return datetime.now(KST).date()
 
 START_DATE = date(2026, 11, 23)
 END_DATE = date(2026, 12, 23)
@@ -61,7 +66,7 @@ footer { visibility: hidden; }
                       radial-gradient(at 50% 95%, rgba(167,243,208,.12) 0px, transparent 45%);
     background-attachment: fixed;
 }
-[data-testid="stSidebar"] { background: rgba(255,255,255,.88); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
+[data-testid="stSidebar"] { background: rgba(255,255,255,.92); backdrop-filter: blur(14px); border-right: 1px solid rgba(226,232,240,.85); }
 .side-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 18px; padding: 14px; box-shadow: 0 6px 18px rgba(15,23,42,.04); margin-bottom: 10px; }
 .exam-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 9px; border-radius: 10px; background: #f8fafc; margin-bottom: 6px; font-size: .8rem; }
 .exam-dday { font-size: .7rem; font-weight: 800; padding: 2px 7px; border-radius: 999px; background: #eef2ff; color: #4f46e5; white-space: nowrap; }
@@ -93,25 +98,34 @@ footer { visibility: hidden; }
 .st-card-hdr { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
 .st-card-title { font-size: 1.02rem; font-weight: 900; letter-spacing: .02em; color: #0f172a; }
 .st-card-total { font-size: .9rem; font-weight: 700; color: #475569; }
-.cal-card { border-radius: 14px; padding: 9px 10px; min-height: 76px; margin-bottom: 6px; box-shadow: 0 3px 10px rgba(15,23,42,.03); }
-.cal-date { font-weight: 800; font-size: .86rem; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; }
-.cal-preview { font-size: .72rem; color: #64748b; line-height: 1.32; word-break: break-all; }
+
+/* 반응형 한달 달력 CSS Grid (PC·아이폰 모두 7열 완벽 유지) */
+.mcal-wrap { background: rgba(255,255,255,.92); border: 1px solid #e2e8f0; border-radius: 18px; padding: 12px 10px; box-shadow: 0 6px 20px rgba(15,23,42,.04); margin-bottom: 10px; }
+.mcal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.mcal-hdr { text-align: center; font-weight: 800; font-size: .82rem; padding: 4px 0 6px 0; }
+.mcal-cell { border-radius: 12px; padding: 7px 6px; min-height: 74px; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; overflow: hidden; }
+.mcal-empty { background: transparent; border: none; min-height: 40px; }
+.mcal-top { display: flex; justify-content: space-between; align-items: center; gap: 2px; font-weight: 800; font-size: .82rem; }
+.mcal-today-tag { font-size: .58rem; font-weight: 900; background: #f59e0b; color: #fff; padding: 1px 4px; border-radius: 999px; }
+.mcal-cnt { font-size: .7rem; font-weight: 700; color: #4f46e5; background: rgba(99,102,241,.1); padding: 1px 5px; border-radius: 6px; display: inline-block; width: fit-content; margin-top: 3px; }
+.mcal-prev { font-size: .68rem; color: #64748b; line-height: 1.25; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .stTextArea textarea, .stTextInput input { font-size: 16px !important; line-height: 1.55 !important; border-radius: 14px !important; border: 1.5px solid #e2e8f0 !important; background-color: #fff !important; }
 .stTextArea textarea:focus, .stTextInput input:focus { border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.16) !important; }
-.stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .78rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .32rem .45rem !important; }
+.stButton > button { border-radius: 10px !important; font-weight: 700 !important; font-size: .78rem !important; border: 1px solid #e2e8f0 !important; background: #fff !important; color: #334155 !important; padding: .35rem .5rem !important; }
 .stButton > button:hover:not(:disabled) { border-color: #6366f1 !important; color: #4f46e5 !important; background: #f5f7ff !important; }
 .stButton > button[kind="primary"] { background: linear-gradient(135deg, #4f46e5 0%, #2563eb 100%) !important; color: #fff !important; border: none !important; box-shadow: 0 4px 12px rgba(79,70,229,.28) !important; }
 .stButton > button:disabled { background: #eef2ff !important; color: #4f46e5 !important; border: 1px solid #c7d2fe !important; opacity: 1 !important; }
 [data-testid="stImage"] img { border-radius: 16px; box-shadow: 0 8px 22px rgba(15,23,42,.08); border: 1px solid #e2e8f0; }
 [data-testid="stFileUploadDropzone"] { border-radius: 14px !important; padding: 12px !important; }
-.tt-row-marker, .cal-row-marker { display: none; height: 0; margin: 0; padding: 0; }
+.tt-row-marker { display: none; height: 0; margin: 0; padding: 0; }
 
 /* 모바일(아이폰) 화면 최적화 */
 @media (max-width: 768px) {
     .block-container {
         padding-top: 1.1rem !important;
-        padding-left: 0.7rem !important;
-        padding-right: 0.7rem !important;
+        padding-left: 0.65rem !important;
+        padding-right: 0.65rem !important;
         padding-bottom: 2.2rem !important;
     }
     .hero-wrap { margin-bottom: 12px; }
@@ -163,28 +177,15 @@ footer { visibility: hidden; }
         font-size: 0.72rem !important;
     }
 
-    /* 전체 달력: 아이폰에서도 7요일 그리드 유지 */
-    .stElementContainer:has(.cal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"],
-    .element-container:has(.cal-row-marker) + .element-container [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
-        gap: 3px !important;
-    }
-    .stElementContainer:has(.cal-row-marker) + .stElementContainer [data-testid="stHorizontalBlock"] > div,
-    .element-container:has(.cal-row-marker) + .element-container [data-testid="stHorizontalBlock"] > div {
-        width: calc(14.28% - 3px) !important;
-        min-width: 0 !important;
-        flex: 1 1 0% !important;
-    }
-    .cal-card { padding: 5px 4px; min-height: 52px; border-radius: 10px; margin-bottom: 3px; }
-    .cal-date { font-size: .68rem; flex-direction: column; align-items: flex-start; gap: 1px; margin-bottom: 2px; }
-    .cal-preview { display: none; }
-    .stElementContainer:has(.cal-row-marker) + .stElementContainer .stButton > button,
-    .element-container:has(.cal-row-marker) + .element-container .stButton > button {
-        padding: 2px 0 !important;
-        min-height: 24px !important;
-        font-size: .65rem !important;
-        border-radius: 7px !important;
-    }
+    /* 아이폰 한달 달력 컴팩트 최적화 */
+    .mcal-wrap { padding: 8px 6px; border-radius: 14px; }
+    .mcal-grid { gap: 3px; }
+    .mcal-hdr { font-size: .74rem; padding-bottom: 4px; }
+    .mcal-cell { padding: 5px 3px; min-height: 54px; border-radius: 9px; }
+    .mcal-top { font-size: .68rem; flex-direction: column; align-items: flex-start; gap: 1px; }
+    .mcal-today-tag { font-size: .52rem; padding: 0 3px; }
+    .mcal-cnt { font-size: .6rem; padding: 0 4px; margin-top: 2px; }
+    .mcal-prev { display: none; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -755,10 +756,7 @@ def toggle_task_done(dk: str, task_label: str):
         done_set.add(task_label)
     st.session_state[f"memo_done_tasks_{dk}"] = json.dumps(list(done_set), ensure_ascii=False)
     save_day(f"done_tasks_{dk}")
-    if day_tasks and all(t in done_set for t in day_tasks):
-        st.session_state[f"chk_{dk}"] = True
-    else:
-        st.session_state[f"chk_{dk}"] = False
+    st.session_state[f"chk_{dk}"] = bool(day_tasks and all(t in done_set for t in day_tasks))
     save_day(dk)
 
 def carry_over_uncompleted_to_next_day(src_day: date, range_str: str) -> int:
@@ -807,7 +805,7 @@ def carry_over_uncompleted_to_next_day(src_day: date, range_str: str) -> int:
     return len(new_entries)
 
 def auto_rollover_past_days():
-    today_dt = date.today()
+    today_dt = get_kst_today()
     range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
     total_moved = 0
     for d in VALID_DATES:
@@ -877,13 +875,12 @@ if st.session_state.get("db_loaded") != USER:
         st.session_state["rollover_notice"] = f"지난 날짜에 못 끝낸 할 일 {moved_cnt}건이 다음 날 시간표로 자동 이월되었어요!"
     st.session_state["db_loaded"] = USER
 
+today = get_kst_today()
+
 if "selected_day" not in st.session_state:
-    today = date.today()
     st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
 
-today = date.today()
-
-# 사이드바
+# 사이드바 (집중 타이머에 재개 버튼 포함)
 with st.sidebar:
     uc1, uc2 = st.columns([2.2, 1])
     with uc1:
@@ -920,17 +917,25 @@ with st.sidebar:
             <button onclick='go(document.getElementById("cm").value,"FOCUS")' style='padding:8px; cursor:pointer; background:linear-gradient(135deg,#4f46e5,#2563eb); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:.8rem;'>🔥 집중</button>
             <button onclick='go(10,"BREAK")' style='padding:8px; cursor:pointer; background:linear-gradient(135deg,#10b981,#059669); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:.8rem;'>💧 10분 휴식</button>
         </div>
-        <div style='display:grid; grid-template-columns:1fr 1fr; gap:6px;'>
-            <button onclick='pause()' style='padding:6px; cursor:pointer; background:#f1f5f9; color:#334155; border:none; border-radius:9px; font-weight:700; font-size:.76rem;'>⏸ 정지</button>
-            <button onclick='reset()' style='padding:6px; cursor:pointer; background:#f1f5f9; color:#64748b; border:none; border-radius:9px; font-weight:700; font-size:.76rem;'>↺ 초기화</button>
+        <div style='display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px;'>
+            <button onclick='resume()' style='padding:6px 2px; cursor:pointer; background:#eef2ff; color:#4f46e5; border:none; border-radius:9px; font-weight:700; font-size:.75rem;'>▶ 재개</button>
+            <button onclick='pause()' style='padding:6px 2px; cursor:pointer; background:#f1f5f9; color:#334155; border:none; border-radius:9px; font-weight:700; font-size:.75rem;'>⏸ 정지</button>
+            <button onclick='reset()' style='padding:6px 2px; cursor:pointer; background:#f1f5f9; color:#64748b; border:none; border-radius:9px; font-weight:700; font-size:.75rem;'>↺ 초기화</button>
         </div>
         <script>
-            let t=null, rem=0;
+            let t=null, rem=0, curMode='FOCUS';
             function draw(){ let m=Math.floor(rem/60), s=rem%60; document.getElementById('tm').textContent=(m<10?'0'+m:m)+':'+(s<10?'0'+s:s); }
-            function go(min, mode){ clearInterval(t); rem=Math.max(1,parseInt(min)||50)*60; document.getElementById('st').textContent=mode; draw();
-                t=setInterval(()=>{ if(--rem<0){ clearInterval(t); document.getElementById('tm').textContent='완료! 👏'; document.getElementById('st').textContent='DONE'; } else draw(); },1000); }
-            function pause(){ clearInterval(t); document.getElementById('st').textContent='PAUSED'; }
-            function reset(){ clearInterval(t); rem=0; document.getElementById('tm').textContent='00:00'; document.getElementById('st').textContent='READY'; }
+            function startTick(){
+                if(t) return;
+                t=setInterval(()=>{
+                    if(--rem<0){ clearInterval(t); t=null; rem=0; document.getElementById('tm').textContent='완료! 👏'; document.getElementById('st').textContent='DONE'; }
+                    else draw();
+                },1000);
+            }
+            function go(min, mode){ clearInterval(t); t=null; curMode=mode; rem=Math.max(1,parseInt(min)||50)*60; document.getElementById('st').textContent=curMode; draw(); startTick(); }
+            function pause(){ if(t){ clearInterval(t); t=null; document.getElementById('st').textContent='PAUSED'; } }
+            function resume(){ if(!t && rem>0){ document.getElementById('st').textContent=curMode; startTick(); } }
+            function reset(){ clearInterval(t); t=null; rem=0; document.getElementById('tm').textContent='00:00'; document.getElementById('st').textContent='READY'; }
         </script>
     </div>
     """
@@ -1329,41 +1334,67 @@ with d_right:
                 save_day(sel_key)
                 st.rerun()
 
-st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 전체 달력</div>', unsafe_allow_html=True)
-st.markdown('<div class="cal-row-marker"></div>', unsafe_allow_html=True)
-header_cols = st.columns(7)
+# 한눈에 보는 전체 달력 (PC·아이폰 전용 7열 CSS Grid + 날짜 바로 이동)
+st.markdown('<div class="sec-header" style="margin-top:26px;"><span class="sec-dot"></span>한눈에 보는 한달 달력</div>', unsafe_allow_html=True)
+
+cal_cells = []
 for i, day_name in enumerate(WEEKDAY_KR):
     color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#64748b"
-    header_cols[i].markdown(f"<div style='text-align:center; font-weight:800; font-size:.82rem; color:{color}; padding-bottom:6px;'>{day_name}</div>", unsafe_allow_html=True)
+    cal_cells.append(f'<div class="mcal-hdr" style="color:{color};">{day_name}</div>')
 
 for week in WEEKS:
-    st.markdown('<div class="cal-row-marker"></div>', unsafe_allow_html=True)
-    cols = st.columns(7)
     for i, day in enumerate(week):
-        with cols[i]:
-            if day is not None:
-                dk = day.strftime('%Y_%m_%d')
-                memo_txt = st.session_state.get(f"memo_{dk}", "").strip()
-                is_done = st.session_state.get(f"chk_{dk}", False)
-                has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
-                if day == sel_day:
-                    bg, border = "#eef2ff", "2px solid #4f46e5"
-                elif is_done:
-                    bg, border = "#ecfdf5", "1.5px solid #6ee7b7"
-                elif day == today:
-                    bg, border = "#fffbeb", "2px solid #f59e0b"
-                else:
-                    bg, border = "rgba(255,255,255,.9)", "1px solid #e2e8f0"
-                day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
-                icons = ("✅" if is_done else "") + (" 📸" if has_photo else "")
-                preview = (memo_txt.replace("\n", " ")[:22] + "…") if len(memo_txt) > 22 else memo_txt.replace("\n", " ")
-                st.markdown(f"""
-                    <div class="cal-card" style="background:{bg}; border:{border};">
-                        <div class="cal-date" style="color:{day_color};"><span>{day.month}/{day.day}{' 🔥' if day == today else ''}</span><span style="font-size:.74rem;">{icons}</span></div>
-                        <div class="cal-preview">{html.escape(preview)}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-                st.button("열기", key=f"cal_btn_{dk}", use_container_width=True, disabled=(day == sel_day), on_click=select_day, args=(day,))
+        if day is not None:
+            dk = day.strftime('%Y_%m_%d')
+            day_t_list = get_day_task_list(dk)
+            is_done = st.session_state.get(f"chk_{dk}", False)
+            has_photo = bool(st.session_state.get(f"photo_url_{dk}", ""))
+            if day == sel_day:
+                bg, border = "#eef2ff", "2px solid #4f46e5"
+            elif is_done:
+                bg, border = "#ecfdf5", "1.5px solid #6ee7b7"
+            elif day == today:
+                bg, border = "#fffbeb", "2px solid #f59e0b"
             else:
-                st.write("")
+                bg, border = "#ffffff", "1px solid #e2e8f0"
+            day_color = "#ef4444" if i == 6 else "#2563eb" if i == 5 else "#1e293b"
+            today_tag = '<span class="mcal-today-tag">TODAY</span>' if day == today else ""
+            icons = ("✅" if is_done else "") + ("📸" if has_photo else "")
+            cnt_badge = f'<span class="mcal-cnt">{len(day_t_list)}개</span>' if day_t_list else ""
+            prev_txt = html.escape(day_t_list[0]) if day_t_list else ""
+            cal_cells.append(
+                f'<div class="mcal-cell" style="background:{bg}; border:{border};">'
+                f'<div class="mcal-top" style="color:{day_color};"><span>{day.month}/{day.day} {today_tag}</span><span>{icons}</span></div>'
+                f'<div>{cnt_badge}<div class="mcal-prev">{prev_txt}</div></div>'
+                f'</div>'
+            )
+        else:
+            cal_cells.append('<div class="mcal-empty"></div>')
+
+st.markdown(f'<div class="mcal-wrap"><div class="mcal-grid">{"".join(cal_cells)}</div></div>', unsafe_allow_html=True)
+
+# 달력 아래 날짜 바로 이동 컨트롤 (아이폰 엄지 터치 최적화)
+nav1, nav2, nav3, nav4 = st.columns([1, 2.3, 1, 1.1], gap="small")
+with nav1:
+    if st.button("◀ 이전 날", use_container_width=True, disabled=(sel_day <= START_DATE)):
+        select_day(sel_day - timedelta(days=1))
+        st.rerun()
+with nav2:
+    def fmt_date_opt(d: date):
+        t_cnt = len(get_day_task_list(d.strftime('%Y_%m_%d')))
+        t_mark = " [TODAY]" if d == today else ""
+        return f"{d.month}/{d.day} ({WEEKDAY_KR[d.weekday()]}){t_mark} · 할일 {t_cnt}개"
+    jump_day = st.selectbox("날짜 바로 이동", VALID_DATES, index=VALID_DATES.index(sel_day), format_func=fmt_date_opt, label_visibility="collapsed")
+    if jump_day != sel_day:
+        select_day(jump_day)
+        st.rerun()
+with nav3:
+    if st.button("다음 날 ▶", use_container_width=True, disabled=(sel_day >= END_DATE)):
+        select_day(sel_day + timedelta(days=1))
+        st.rerun()
+with nav4:
+    today_target = today if START_DATE <= today <= END_DATE else START_DATE
+    if st.button("📍 오늘로", use_container_width=True, disabled=(sel_day == today_target)):
+        select_day(today_target)
+        st.rerun()
 # 끝

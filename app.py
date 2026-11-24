@@ -775,7 +775,19 @@ def distribute_exam_total_plan(start_d: date, end_d: date, range_str: str, total
         distribute_days_and_grid(days_in_wk, range_str, week_task_objs[w_idx])
 
 def get_day_task_list(dk: str):
-    return [line.strip() for line in st.session_state.get(f"memo_{dk}", "").splitlines() if line.strip()]
+    tasks = [line.strip() for line in st.session_state.get(f"memo_{dk}", "").splitlines() if line.strip()]
+    if not tasks:
+        grid = load_day_grid(dk)
+        if grid:
+            seen = []
+            for h_str in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else 999):
+                val = grid[h_str]
+                if val and val not in seen:
+                    seen.append(val)
+            if seen:
+                st.session_state[f"memo_{dk}"] = "\n".join(seen)
+                return seen
+    return tasks
 
 def get_done_tasks_set(dk: str) -> set:
     raw = st.session_state.get(f"memo_done_tasks_{dk}", "")
@@ -796,12 +808,11 @@ def toggle_task_done(dk: str, task_label: str):
     st.session_state[f"chk_{dk}"] = bool(day_tasks and all(t in done_set for t in day_tasks))
     save_day(dk)
 
-def carry_over_uncompleted_to_next_day(src_day: date, range_str: str) -> int:
-    next_day = src_day + timedelta(days=1)
-    if next_day > END_DATE:
+def carry_over_uncompleted_to_target(src_day: date, target_day: date, range_str: str) -> int:
+    if target_day > END_DATE or target_day <= src_day:
         return 0
     src_dk = src_day.strftime('%Y_%m_%d')
-    nxt_dk = next_day.strftime('%Y_%m_%d')
+    tgt_dk = target_day.strftime('%Y_%m_%d')
 
     src_tasks = get_day_task_list(src_dk)
     done_set = get_done_tasks_set(src_dk)
@@ -822,40 +833,24 @@ def carry_over_uncompleted_to_next_day(src_day: date, range_str: str) -> int:
     st.session_state[f"memo_grid_{src_dk}"] = json.dumps(cleaned_src_grid, ensure_ascii=False)
     save_day(f"grid_{src_dk}")
 
-    nxt_tasks = get_day_task_list(nxt_dk)
+    tgt_tasks = get_day_task_list(tgt_dk)
     new_entries = []
     for t in uncompleted:
         clean_t = re.sub(r"^\[이월\]\s*", "", t).strip()
         carried_lbl = f"[이월] {clean_t}"
-        if carried_lbl not in nxt_tasks:
-            nxt_tasks.append(carried_lbl)
+        if carried_lbl not in tgt_tasks:
+            tgt_tasks.append(carried_lbl)
             new_entries.append((carried_lbl, extract_task_hours(clean_t)[1]))
 
-    st.session_state[f"memo_{nxt_dk}"] = "\n".join(nxt_tasks)
-    st.session_state[f"chk_{nxt_dk}"] = False
-    save_day(nxt_dk)
+    st.session_state[f"memo_{tgt_dk}"] = "\n".join(tgt_tasks)
+    st.session_state[f"chk_{tgt_dk}"] = False
+    save_day(tgt_dk)
 
     if new_entries:
-        existing_nxt_grid = load_day_grid(nxt_dk)
-        auto_fill_day_grid(next_day, new_entries, range_str, existing_grid=existing_nxt_grid)
+        existing_tgt_grid = load_day_grid(tgt_dk)
+        auto_fill_day_grid(target_day, new_entries, range_str, existing_grid=existing_tgt_grid)
 
     return len(new_entries)
-
-def auto_rollover_past_days():
-    today_dt = get_kst_today()
-    range_str = st.session_state.get("memo_fixed_range", "07:00-24:00")
-    total_moved = 0
-    for d in VALID_DATES:
-        if d >= today_dt:
-            break
-        dk = d.strftime('%Y_%m_%d')
-        if st.session_state.get(f"chk_{dk}", False):
-            continue
-        if st.session_state.get(f"memo_carried_{dk}") == "1":
-            continue
-        moved = carry_over_uncompleted_to_next_day(d, range_str)
-        total_moved += moved
-    return total_moved
 
 def render_week_task_chips(dk: str) -> str:
     tasks = get_day_task_list(dk)
@@ -908,7 +903,9 @@ def move_task_block(dk: str, target_task: str, free_hours, new_start_h=None, ste
     st.session_state[f"memo_grid_{dk}"] = json.dumps(grid, ensure_ascii=False)
     save_day(f"grid_{dk}")
 
-# 2. 로그인한 사용자 데이터 로드 + 지난 날짜 미완료 할 일 자동 이월
+today = get_kst_today()
+
+# 2. 로그인한 사용자 데이터 로드 (기존 할 일 임의 삭제 없이 안전하게 로드)
 if st.session_state.get("db_loaded") != USER:
     for k in list(st.session_state.keys()):
         if k.startswith(("memo_", "chk_", "photo_url_")):
@@ -925,12 +922,8 @@ if st.session_state.get("db_loaded") != USER:
         st.session_state["memo_habit_list"] = "12시 전 취침, 아침 식사, 물 마시기, 운동 30분, 밤에 폰 안 보기"
     st.session_state.setdefault("memo_exam_schedule", "")
     st.session_state.setdefault("memo_total_exam_tasks", "")
-    moved_cnt = auto_rollover_past_days()
-    if moved_cnt > 0:
-        st.session_state["rollover_notice"] = f"지난 날짜에 못 끝낸 할 일 {moved_cnt}건이 다음 날 시간표로 자동 이월되었어요!"
+    st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
     st.session_state["db_loaded"] = USER
-
-today = get_kst_today()
 
 if "selected_day" not in st.session_state:
     st.session_state["selected_day"] = today if START_DATE <= today <= END_DATE else START_DATE
@@ -1247,6 +1240,31 @@ with d_left:
                 <span class="st-card-total"><b style="color:#4f46e5;">{sum(1 for t in day_tasks if t in done_set)}</b> / {len(day_tasks)}</span>
             </div>
         """, unsafe_allow_html=True)
+
+        # 지난 날짜에 못 끝낸 할 일이 있을 때 선택적으로 가져오는 버튼 (자동 삭제 방지)
+        past_uncompleted = []
+        for d in VALID_DATES:
+            if d >= sel_day:
+                break
+            p_dk = d.strftime('%Y_%m_%d')
+            if st.session_state.get(f"memo_carried_{p_dk}") == "1":
+                continue
+            p_tasks = get_day_task_list(p_dk)
+            p_done = get_done_tasks_set(p_dk)
+            rem = [t for t in p_tasks if t not in p_done]
+            if rem:
+                past_uncompleted.append((d, rem))
+
+        if past_uncompleted and sel_day <= END_DATE:
+            total_past_cnt = sum(len(r) for _, r in past_uncompleted)
+            if st.button(f"📥 지난 날 못 끝낸 할 일({total_past_cnt}건) 오늘로 가져오기", use_container_width=True, key=f"pull_past_{sel_key}"):
+                total_pulled = 0
+                for src_d, _ in past_uncompleted:
+                    total_pulled += carry_over_uncompleted_to_target(src_d, sel_day, range_str)
+                if total_pulled > 0:
+                    st.session_state["rollover_notice"] = f"지난 날 못 끝낸 할 일 {total_pulled}건을 오늘 시간표로 가져왔어요!"
+                st.rerun()
+
         if day_tasks:
             for idx_t, t in enumerate(day_tasks):
                 dot = color_map[t][3]
@@ -1260,7 +1278,7 @@ with d_left:
             uncompleted_now = [t for t in day_tasks if t not in done_set]
             if uncompleted_now and sel_day < END_DATE:
                 if st.button(f"⏭️ 못 한 할 일({len(uncompleted_now)}건) 다음날로 이월 & 자동 배치", use_container_width=True):
-                    moved = carry_over_uncompleted_to_next_day(sel_day, range_str)
+                    moved = carry_over_uncompleted_to_target(sel_day, sel_day + timedelta(days=1), range_str)
                     if moved > 0:
                         st.session_state["rollover_notice"] = f"{moved}건이 {sel_day + timedelta(days=1)} 시간표로 이월 및 자동 배치되었어요!"
                     st.rerun()
